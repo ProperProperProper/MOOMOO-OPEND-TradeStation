@@ -53,6 +53,7 @@ pub struct DemoBook {
     pub activities: Vec<Activity>,
     pub created: Option<DateTime<Utc>>,
     pub updated: Option<DateTime<Utc>>,
+    pub opend_account_id: Option<String>,
     seq: u64,
 }
 
@@ -68,6 +69,7 @@ impl Default for DemoBook {
             activities: Vec::new(),
             created: None,
             updated: None,
+            opend_account_id: None,
             seq: 0,
         }
     }
@@ -235,12 +237,23 @@ impl DemoBook {
         self.cash + self.invested()
     }
 
+    /// Sync funds from live Moomoo OpenD paper account.
+    pub fn sync_opend_funds(&mut self, acc_id: &str, cash: f64, total_assets: f64) {
+        if cash.is_finite() && cash >= 0.0 {
+            self.cash = cash;
+            self.starting_cash = if total_assets.is_finite() && total_assets > 0.0 { total_assets } else { cash };
+            self.opend_account_id = Some(acc_id.to_string());
+            self.updated = Some(Utc::now());
+        }
+    }
+
     /// The account as the portfolio panes show it.
     pub fn account(&self) -> Account {
+        let number = self.opend_account_id.as_deref().unwrap_or("PAPER");
         Account {
             id: ACCOUNT_ID.into(),
             name: "Moomoo Paper Account".into(),
-            number: "PAPER".into(),
+            number: number.into(),
             institution: "Moomoo OpenD".into(),
             currency: "USD".into(),
             total: Some(self.equity()),

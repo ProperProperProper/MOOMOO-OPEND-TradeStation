@@ -28,6 +28,7 @@ pub struct DemoState {
     pub pf: Box<Portfolio>,
     path: PathBuf,
     last_quotes: Option<Instant>,
+    last_opend_sync: Option<Instant>,
     /// Settings › Trading: the reset confirmation is open, with this starting cash.
     pub confirm_reset: bool,
     pub reset_cash: f64,
@@ -80,6 +81,7 @@ impl DemoState {
                 pf,
                 path,
                 last_quotes: None,
+                last_opend_sync: None,
                 confirm_reset: false,
                 reset_cash: STARTING_CASH,
                 save_error: None,
@@ -87,6 +89,33 @@ impl DemoState {
             },
             note,
         )
+    }
+
+    /// Updates the book with live paper trading funds and positions from Moomoo OpenD.
+    pub fn on_opend_synced(&mut self, funds: tr_moomoo::OpenDFunds, positions: Vec<tr_moomoo::OpenDPosition>) {
+        self.book.sync_opend_funds(&funds.acc_id, funds.cash, funds.total_assets);
+        if !positions.is_empty() {
+            let mut mapped = Vec::new();
+            for p in positions {
+                let sym = tr_broker::trading::clean_symbol(&p.symbol).unwrap_or(p.symbol);
+                mapped.push(tr_broker::Position {
+                    account_id: tr_broker::demo::ACCOUNT_ID.into(),
+                    symbol: sym,
+                    description: p.name,
+                    kind: tr_broker::InstrumentKind::Stock,
+                    units: p.qty,
+                    price: Some(p.price),
+                    cost_basis: Some(p.cost_price),
+                    multiplier: 1.0,
+                    currency: "USD".into(),
+                    cash_equivalent: false,
+                    underlying: None,
+                    market: None,
+                });
+            }
+            self.book.positions = mapped;
+        }
+        self.changed();
     }
 
     /// The book changed: rebuild the view and save.
@@ -141,6 +170,10 @@ impl TerminalApp {
             self.trade_toast("Moomoo Paper account saved", true);
         }
         let now = chrono::Utc::now();
+        if self.demo_mode() && self.demo.last_opend_sync.is_none_or(|t| t.elapsed() > Duration::from_secs(5)) {
+            self.worker.send(Request::SyncMoomooPaper);
+            self.demo.last_opend_sync = Some(Instant::now());
+        }
         let expired = self.demo.book.expire(now);
         if !expired.is_empty() {
             self.demo.changed();

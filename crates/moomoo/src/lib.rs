@@ -1,3 +1,6 @@
+pub mod opend_proto;
+pub use opend_proto::{OpenDFunds, OpenDPosition, OpenDProtoSession};
+
 use std::collections::HashSet;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::sync::Arc;
@@ -167,6 +170,8 @@ pub struct MoomooAccount {
     pub cash: f64,
     pub market_val: f64,
     pub currency: String,
+    #[serde(default)]
+    pub buying_power: f64,
 }
 
 /// Normalizes ticker for case-insensitive watchlist matching.
@@ -293,8 +298,53 @@ impl OpenDClient {
         guard.as_ref().is_some_and(|set| set.contains(&ticker) || set.contains(&upper))
     }
 
+    /// Fetches live paper trading funds and open positions from local OpenD.
+    pub async fn fetch_paper_trading(&self) -> Result<(OpenDFunds, Vec<OpenDPosition>)> {
+        let mut session = OpenDProtoSession::connect(&self.addr).await?;
+        let paper_accs = session.get_paper_accounts().await?;
+        let (acc_id, market) = paper_accs
+            .iter()
+            .find(|(_, m)| *m == 2)
+            .or_else(|| paper_accs.first())
+            .copied()
+            .ok_or_else(|| anyhow::anyhow!("No paper trading account found in OpenD"))?;
+
+        let funds = session.get_funds(acc_id, market).await?;
+        let positions = session.get_positions(acc_id, market).await.unwrap_or_default();
+        Ok((funds, positions))
+    }
+
     /// Fetches Moomoo account information for either Paper Trading (Simulate) or Live Trading (Real).
+    /// Queries the live OpenD gateway directly when available, falling back to local simulation defaults.
     pub async fn fetch_account(&self, env: TradeEnv) -> Result<MoomooAccount> {
+        if let Ok(mut session) = OpenDProtoSession::connect(&self.addr).await {
+            match env {
+                TradeEnv::Simulate => {
+                    if let Ok(paper_accs) = session.get_paper_accounts().await {
+                        let target_acc = paper_accs
+                            .iter()
+                            .find(|(_, market)| *market == 2)
+                            .or_else(|| paper_accs.first());
+
+                        if let Some((acc_id, market)) = target_acc {
+                            if let Ok(funds) = session.get_funds(*acc_id, *market).await {
+                                return Ok(MoomooAccount {
+                                    account_id: funds.acc_id,
+                                    env,
+                                    total_assets: funds.total_assets,
+                                    cash: funds.cash,
+                                    market_val: funds.market_val,
+                                    currency: funds.currency,
+                                    buying_power: funds.power,
+                                });
+                            }
+                        }
+                    }
+                }
+                TradeEnv::Real => {}
+            }
+        }
+
         let (id, default_cash) = match env {
             TradeEnv::Simulate => ("moomoo-paper-01", 100_000.0),
             TradeEnv::Real => ("moomoo-live-01", 0.0),
@@ -306,6 +356,7 @@ impl OpenDClient {
             cash: default_cash,
             market_val: 0.0,
             currency: "USD".to_string(),
+            buying_power: default_cash,
         })
     }
 

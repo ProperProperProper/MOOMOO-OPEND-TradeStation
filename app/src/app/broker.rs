@@ -468,8 +468,8 @@ impl TerminalApp {
         match arg.trim() {
             "REFRESH" | "SYNC" | "RELOAD" => {
                 if self.demo_mode() {
-                    self.status =
-                        "The demo account is local and always current (MODE LIVE for brokerage accounts)".into();
+                    self.worker.send(Request::SyncMoomooPaper);
+                    self.status = "Syncing Moomoo paper account balance from OpenD…".into();
                 } else if self.broker.mode() == BrokerMode::Setup {
                     self.status = "Brokerage not set up: PORT SETUP".into();
                 } else {

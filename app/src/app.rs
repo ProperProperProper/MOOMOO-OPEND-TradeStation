@@ -742,6 +742,7 @@ impl TerminalApp {
         app.worker.send(Request::Latest { limit: 2_000 });
         app.worker.send(Request::SearchPoliticians(String::new()));
         app.worker.send(Request::Alerts);
+        app.worker.send(Request::SyncMoomooPaper);
         if let Some(note) = demo_note {
             app.trade_toast(note, false);
         }
@@ -1142,6 +1143,16 @@ impl TerminalApp {
                 Response::Portfolio(result) => {
                     let result = self.keep_simulated_trades(result);
                     self.on_portfolio(result)
+                }
+                Response::MoomooPaperSynced(result) => {
+                    match result {
+                        Ok((funds, positions)) => {
+                            self.demo.on_opend_synced(funds, positions);
+                        }
+                        Err(e) => {
+                            tracing::debug!("OpenD paper sync: {e}");
+                        }
+                    }
                 }
                 Response::BrokerRegistered(result) => self.on_broker_registered(result),
                 Response::BrokerPortal(result) => self.on_broker_portal(result),

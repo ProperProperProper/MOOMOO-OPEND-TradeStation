@@ -7,8 +7,10 @@ edition = "2024"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "net", "io-util"] }
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
 anyhow = "1"
 url = "2"
+sha1 = "0.10"
+

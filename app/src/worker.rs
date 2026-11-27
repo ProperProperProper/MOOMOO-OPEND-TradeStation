@@ -152,6 +152,8 @@ pub enum Request {
     Hl(crate::hl_worker::HlRequest),
     /// The built-in wallet (Turnkey sign-in and approvals).
     Wallet(crate::wallet_worker::WalletRequest),
+    /// Sync live paper trading balance and positions from local Moomoo OpenD.
+    SyncMoomooPaper,
 }
 
 /// A trading call through the broker gateway. Previews never place anything; placing takes a preview
@@ -325,6 +327,7 @@ pub enum Response {
     PerpMarkets(Result<Vec<String>, String>),
     Trade(Box<TradeResponse>),
     Hl(Box<crate::hl_worker::HlResponse>),
+    MoomooPaperSynced(Result<(tr_moomoo::OpenDFunds, Vec<tr_moomoo::OpenDPosition>), String>),
 }
 
 pub struct Worker {
@@ -823,6 +826,11 @@ async fn handle(s: &Arc<Shared>, req: Request) {
         Request::Wallet(r) => {
             let out = s.clone();
             crate::wallet_worker::handle(r, move |resp| out.send(Response::Hl(Box::new(resp)))).await
+        }
+        Request::SyncMoomooPaper => {
+            let client = tr_moomoo::OpenDClient::default();
+            let res = client.fetch_paper_trading().await.map_err(|e| format!("{e:#}"));
+            s.send(Response::MoomooPaperSynced(res));
         }
     }
 }
