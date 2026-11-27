@@ -29,8 +29,8 @@ pub use session::{Session, SessionKey};
 /// How long a sign-in waits for the browser, on the desktop and in the browser build.
 pub const SIGN_IN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(600);
 
-/// Terminal's sign-in page.
-pub const SIGN_IN_PAGE: &str = "https://terminal.rasmic.xyz/wallet";
+/// Terminal's sign-in page (restricted to loopback only).
+pub const SIGN_IN_PAGE: &str = "http://127.0.0.1:11111/wallet";
 
 /// The sign-in page, unless `TR_WALLET_SIGN_IN_URL` names a local mock's page (desktop only,
 /// loopback only, e.g. `http://127.0.0.1:<port>/wallet`).

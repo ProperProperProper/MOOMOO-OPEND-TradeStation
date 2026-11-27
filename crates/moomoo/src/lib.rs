@@ -163,7 +163,7 @@ impl OpenDClient {
         validate_loopback_only(&addr)?;
 
         let http_client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(5))
+            .timeout(std::time::Duration::from_secs(2))
             .build()?;
 
         info!("Moomoo OpenD client initialized on loopback address: {}", addr);

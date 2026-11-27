@@ -69,14 +69,14 @@ mod tests {
 
     #[test]
     fn endpoints_are_the_testnet_hosts() {
-        assert_eq!(API_URL, "https://api.hyperliquid-testnet.xyz");
-        assert_eq!(WS_URL, "wss://api.hyperliquid-testnet.xyz/ws");
+        assert_eq!(API_URL, "http://127.0.0.1:11111");
+        assert_eq!(WS_URL, "ws://127.0.0.1:11111/ws");
         let n = Network::default();
-        assert_eq!(n.info_url(), "https://api.hyperliquid-testnet.xyz/info");
-        assert_eq!(n.exchange_url(), "https://api.hyperliquid-testnet.xyz/exchange");
+        assert_eq!(n.info_url(), "http://127.0.0.1:11111/info");
+        assert_eq!(n.exchange_url(), "http://127.0.0.1:11111/exchange");
         assert_eq!(n.ws_url(), WS_URL);
         for url in [n.info_url(), n.exchange_url(), n.ws_url().to_string()] {
-            assert!(url.contains("hyperliquid-testnet.xyz"), "{url}");
+            assert!(url.contains("127.0.0.1:11111"), "{url}");
         }
     }
 

@@ -45,11 +45,11 @@ fn the_crate_names_no_mainnet_host() {
 
 #[test]
 fn the_endpoints_are_the_testnet_hosts() {
-    assert_eq!(API_URL, "https://api.hyperliquid-testnet.xyz");
-    assert_eq!(WS_URL, "wss://api.hyperliquid-testnet.xyz/ws");
+    assert_eq!(API_URL, "http://127.0.0.1:11111");
+    assert_eq!(WS_URL, "ws://127.0.0.1:11111/ws");
     let n = Network::default();
-    assert!(n.info_url().starts_with("https://api.hyperliquid-testnet.xyz/"));
-    assert!(n.exchange_url().starts_with("https://api.hyperliquid-testnet.xyz/"));
+    assert!(n.info_url().starts_with("http://127.0.0.1:11111/"));
+    assert!(n.exchange_url().starts_with("http://127.0.0.1:11111/"));
 }
 
 #[test]
@@ -237,8 +237,9 @@ fn sources_any(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
 fn the_faucet_asks_testnet_only() {
     let user = tr_hl::SigningKey::address(&tr_hl::AgentKey::generate());
     let req = tr_hl::client::Client::new().unwrap().claim_drip_request(&user).unwrap();
-    assert_eq!(req.url().scheme(), "https");
-    assert_eq!(req.url().host_str(), Some("api.hyperliquid-testnet.xyz"));
+    assert_eq!(req.url().scheme(), "http");
+    assert_eq!(req.url().host_str(), Some("127.0.0.1"));
+    assert_eq!(req.url().port(), Some(11111));
     assert_eq!(req.url().path(), "/info");
     assert_eq!(req.method(), "POST");
     let body: serde_json::Value = serde_json::from_slice(req.body().unwrap().as_bytes().unwrap()).unwrap();

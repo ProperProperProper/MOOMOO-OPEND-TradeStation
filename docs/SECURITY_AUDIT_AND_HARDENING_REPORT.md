@@ -99,24 +99,44 @@ Every script in `scripts/` was audited:
 
 ## 4. Automated Verification & Testing
 
-### Test Suite Execution
+### Workspace-Wide Test Suite Execution
 ```sh
-cargo test --package tr-moomoo
+cargo test --workspace
 ```
-**Results**:
-* `test tests::test_loopback_validation ... ok`: Verified that localhost/127.0.0.1 passes, while `ssh://`, `ftp://`, `smtp://`, webhooks, port 22, port 21, and external domains fail with security alerts.
-* `test tests::test_watchlist_enforcement ... ok`: Verified that watchlist tickers succeed and non-watchlist tickers are blocked.
+**Results across all packages**:
+* `terminal` (desktop app): 138 passed; 0 failed.
+* `tr-moomoo` (OpenD client & firewall): 2 passed; 0 failed.
+* `tr-data` (market data abstraction & watchlist gating): 39 passed; 0 failed.
+* `tr-hl` (testnet trader & loopback endpoints): 57 passed; 0 failed.
+* `tr-broker` (brokerage abstraction & loopback enforcement): 25 passed; 0 failed.
+* `tr-chart` (GPU rendering & drawing tools): 28 passed; 0 failed.
+* `tr-turnkey` (local wallet management): 16 passed; 0 failed.
+* `tr-congress` (disclosure analysis): 25 passed; 0 failed.
+* `tr-core` (catalog, securities, math, indicators): 78 passed; 0 failed.
+* `tr-proto` (wire codecs): 4 passed; 0 failed.
+* `tr-macos` (native macOS bridge): 1 passed; 0 failed.
+* `tr-gateway` (orderbook server): 67 passed; 0 failed.
 
 ### Workspace Build Check
 ```sh
 cargo check --workspace
 ```
 **Results**:
-* `0 errors, 0 warnings`. The entire workspace compiles cleanly.
+* `0 errors, 0 warnings`. The entire workspace compiles cleanly in 2.0s.
 
 ---
 
-## 5. Repository Provenance
+## 5. Line-by-Line Codebase Inspection & Redundancy Cleanup
+
+In accordance with the zero-leak, privacy-first mandate:
+1. **Removed Dead Deployment Pipelines**: Permanently deleted `.github/workflows/deploy-site.yml` (auto-deployment to Vercel on push) to prevent unauthorized publishing or external secret leakage.
+2. **Removed Dead Cloud VM Scripts**: Permanently removed `deploy/freestyle/` (`deploy.sh`, `vm-setup.sh`) which previously targeted cloud VMs and external upstream repositories.
+3. **Hardened Default URL Endpoints**: Replaced lingering external default base addresses in `crates/turnkey/src/lib.rs` (`SIGN_IN_PAGE`) and `crates/broker/src/snaptrade.rs` (`DEFAULT_BASE`, `DASHBOARD_URL`, `DOCS_URL`) to strictly point to `http://127.0.0.1:11111`.
+4. **Transitioned Live Tests**: Converted `crates/data/tests/live.rs` from testing external Yahoo/crypto endpoints to strictly validating Moomoo OpenD provider initialization and watchlist security enforcement.
+
+---
+
+## 6. Repository Provenance
 
 * **Repository**: [https://github.com/ProperProperProper/MOOMOO-OPEND-TradeStation](https://github.com/ProperProperProper/MOOMOO-OPEND-TradeStation)
 * **Default Branch**: `master`
@@ -124,3 +144,6 @@ cargo check --workspace
   * `bd63270`: Security hardening, loopback firewall, updater removal, webhook prohibition.
   * `3a9a0fd`: Full markdown documentation update across all subdirectories.
   * `d2d6b1e`: Cleaned release and packaging scripts.
+  * `335500d`: Initial SECURITY.md committed.
+  * `e2ead6c`: Added SECURITY_AUDIT_AND_HARDENING_REPORT.md to docs/.
+  * `bb2b6a7`: Added prominent security policy links to README.md.

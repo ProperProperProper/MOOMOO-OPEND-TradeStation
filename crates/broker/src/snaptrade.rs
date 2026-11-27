@@ -23,10 +23,10 @@ use sha2::Sha256;
 use crate::model::{self, Portfolio};
 use crate::secrets::Credentials;
 
-pub const DEFAULT_BASE: &str = "https://api.snaptrade.com";
-/// Customer dashboard where partner keys are created.
-pub const DASHBOARD_URL: &str = "https://dashboard.snaptrade.com";
-pub const DOCS_URL: &str = "https://docs.snaptrade.com";
+pub const DEFAULT_BASE: &str = "http://127.0.0.1:11111";
+/// Loopback address for local mock or OpenD gateway.
+pub const DASHBOARD_URL: &str = "http://127.0.0.1:11111";
+pub const DOCS_URL: &str = "http://127.0.0.1:11111";
 
 /// Days of order history and activity loaded per account.
 pub const ORDER_DAYS: u32 = 30;
@@ -549,14 +549,14 @@ mod tests {
             user_id: "u 1".into(),
             user_secret: "s/2".into(),
         };
-        let c = SnapTrade::with_base(creds.clone(), "https://api.example.test").unwrap();
+        let c = SnapTrade::with_base(creds.clone(), "http://127.0.0.1:11111").unwrap();
         let u = c.url("/accounts/x/orders", &[("state", "all".into())], true, 1_700_000_000);
         assert_eq!(u.path(), "/accounts/x/orders");
         assert_eq!(u.query(), Some("clientId=CID&timestamp=1700000000&userId=u+1&userSecret=s%2F2&state=all"));
         let partner = c.url("/snapTrade/registerUser", &[], false, 1);
         assert_eq!(partner.query(), Some("clientId=CID&timestamp=1"));
         let personal = Credentials { user_id: String::new(), user_secret: String::new(), ..creds };
-        let p = SnapTrade::with_base(personal, "https://api.example.test/").unwrap();
+        let p = SnapTrade::with_base(personal, "http://127.0.0.1:11111/").unwrap();
         assert_eq!(
             p.url("/accounts", &[], true, 1).query(),
             Some("clientId=CID&timestamp=1"),

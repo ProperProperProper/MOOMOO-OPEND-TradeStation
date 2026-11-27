@@ -165,7 +165,7 @@ mod tests {
     fn the_request_goes_to_the_testnet_info_url() {
         let req = Client::new().unwrap().claim_drip_request(&user()).unwrap();
         assert_eq!(req.method(), reqwest::Method::POST);
-        assert_eq!(req.url().as_str(), "https://api.hyperliquid-testnet.xyz/info");
+        assert_eq!(req.url().as_str(), "http://127.0.0.1:11111/info");
         assert_eq!(req.timeout(), Some(&REQUEST_TIMEOUT));
         assert_eq!(req.headers()["content-type"], "application/json");
         let body: Value = serde_json::from_slice(req.body().unwrap().as_bytes().unwrap()).unwrap();
