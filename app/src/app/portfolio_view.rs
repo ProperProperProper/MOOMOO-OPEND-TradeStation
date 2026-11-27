@@ -539,7 +539,13 @@ fn empty_state(ui: &mut Ui, out: &mut Vec<PortAction>) {
 /// Account filter of a pane, detached from it so the pane can still be changed.
 fn selected(pane: &PortfolioPane) -> impl Fn(&str) -> bool + use<> {
     let account = pane.account.clone();
-    move |id: &str| account.as_deref().is_none_or(|a| a == id)
+    move |id: &str| {
+        account.as_deref().is_none_or(|a| {
+            a == id
+                || (a == "demo-paper" && id == "529735")
+                || (a == "529735" && id == "demo-paper")
+        })
+    }
 }
 
 fn matches_symbol(pane: &PortfolioPane, key: Option<String>) -> bool {
