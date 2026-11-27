@@ -70,7 +70,7 @@ Enforced at both the OpenD client level and the market data abstraction layer (`
 ### Step 4: Disconnection & Neutralization of Third-Party Feeds
 * **Yahoo Finance, Alpaca, Binance, Coinbase, US Treasury**: The multi-source router in `crates/data/src/markets.rs` was replaced with direct delegation to `OpenDClient`.
 * **Congressional Web Scrapers**: In `crates/congress/src/refresh.rs`, external scraping of Senate eFD (`efdsearch.senate.gov`) and House Clerk (`disclosures-clerk.house.gov`) was disabled; `HttpSource` was converted to a local no-op.
-* **SnapTrade & Hyperliquid Endpoints**: Base URLs in `crates/broker/src/snaptrade.rs` and `crates/hl/src/network.rs` were restricted to loopback with security validation.
+* **Moomoo OpenD & Hyperliquid Endpoints**: Base URLs in `crates/broker/src/moomoo.rs` and `crates/hl/src/network.rs` were restricted to loopback with security validation.
 
 ### Step 5: Removal of Auto-Updater & Telemetry
 * **Deleted Sparkle Updater**: Permanently removed `crates/macos/src/updater.rs`, deleted `scripts/fetch-sparkle.sh`, and removed Sparkle framework embedding from `scripts/bundle-macos.sh`.
@@ -131,7 +131,7 @@ cargo check --workspace
 In accordance with the zero-leak, privacy-first mandate:
 1. **Removed Dead Deployment Pipelines**: Permanently deleted `.github/workflows/deploy-site.yml` (auto-deployment to Vercel on push) to prevent unauthorized publishing or external secret leakage.
 2. **Removed Dead Cloud VM Scripts**: Permanently removed `deploy/freestyle/` (`deploy.sh`, `vm-setup.sh`) which previously targeted cloud VMs and external upstream repositories.
-3. **Hardened Default URL Endpoints**: Replaced lingering external default base addresses in `crates/turnkey/src/lib.rs` (`SIGN_IN_PAGE`) and `crates/broker/src/snaptrade.rs` (`DEFAULT_BASE`, `DASHBOARD_URL`, `DOCS_URL`) to strictly point to `http://127.0.0.1:11111`.
+3. **Hardened Default URL Endpoints**: Replaced lingering external default base addresses in `crates/turnkey/src/lib.rs` (`SIGN_IN_PAGE`) and `crates/broker/src/moomoo.rs` (`DEFAULT_BASE`, `DASHBOARD_URL`, `DOCS_URL`) to strictly point to `http://127.0.0.1:11111`.
 4. **Transitioned Live Tests**: Converted `crates/data/tests/live.rs` from testing external Yahoo/crypto endpoints to strictly validating Moomoo OpenD provider initialization and watchlist security enforcement.
 
 ---

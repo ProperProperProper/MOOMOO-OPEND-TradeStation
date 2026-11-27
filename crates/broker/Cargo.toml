@@ -1,6 +1,6 @@
 [package]
 name = "tr-broker"
-description = "Brokerage accounts through SnapTrade: signed API client, portfolio model, order entry and credential storage"
+description = "Brokerage accounts through Moomoo OpenD: signed API client, portfolio model, order entry and credential storage"
 version.workspace = true
 edition.workspace = true
 
@@ -28,7 +28,7 @@ keyring = { version = "3", default-features = false, features = ["async-secret-s
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio.workspace = true
 
-# The browser build never calls SnapTrade (see `SnapTrade::with_base`); the client only compiles.
+# The browser build never calls external broker endpoints (see `MoomooClient::with_base`); the client only compiles.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { version = "1", default-features = false, features = ["sync", "time"] }
 

@@ -468,7 +468,7 @@ mod tests {
         // External endpoints
         assert!(validate_loopback_only("8.8.8.8:80").is_err());
         assert!(validate_loopback_only("https://api.binance.com").is_err());
-        assert!(validate_loopback_only("https://api.snaptrade.com").is_err());
+        assert!(validate_loopback_only("https://api.externalbroker.com").is_err());
         assert!(validate_loopback_only("https://query1.finance.yahoo.com").is_err());
         assert!(validate_loopback_only("https://www.tradingview.com").is_err());
 

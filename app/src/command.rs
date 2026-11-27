@@ -358,7 +358,7 @@ fn parse_function(head: &str, rest: &[&str]) -> Option<Function> {
         "POS" | "POSITIONS" | "HOLDINGS" => Function::Portfolio(PortView::Positions, words().join(" ")),
         "ORD" | "ORDERS" | "BLTR" => Function::Portfolio(PortView::Orders, words().join(" ")),
         "ACTV" | "ACTIVITY" | "TXNS" | "TRANSACTIONS" => Function::Portfolio(PortView::Activity, words().join(" ")),
-        "BROKER" | "BROKERAGE" | "SNAPTRADE" => Function::Portfolio(PortView::Summary, "SETUP".into()),
+        "BROKER" | "BROKERAGE" | "MOOMOO" | "OPEND" => Function::Portfolio(PortView::Summary, "SETUP".into()),
         "BUY" => Function::Trade(TradeArgs::parse(Some(true), rest)?),
         "SELL" => Function::Trade(TradeArgs::parse(Some(false), rest)?),
         "TRADE" | "TICKET" | "EMSX" => Function::Trade(TradeArgs::parse(None, rest)?),

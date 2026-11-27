@@ -1,6 +1,6 @@
-//! Brokerage portfolio model, normalised from SnapTrade responses.
+//! Brokerage portfolio model, normalised from broker responses.
 //!
-//! SnapTrade sends decimals both as JSON numbers and as strings (`"10.5"`), and many fields
+//! The broker sends decimals both as JSON numbers and as strings (`"10.5"`), and many fields
 //! are nullable or vary by brokerage, so parsing is lenient: unknown or missing values become
 //! `None` rather than failing the whole account.
 
@@ -27,12 +27,12 @@ pub struct Account {
     pub is_paper: bool,
     /// Last successful holdings sync.
     pub synced: Option<DateTime<Utc>>,
-    /// The brokerage connection (SnapTrade authorization) this account belongs to.
+    /// The brokerage connection this account belongs to.
     #[serde(default)]
     pub connection_id: String,
 }
 
-/// A brokerage connection (SnapTrade "brokerage authorization"): one login at one broker,
+/// A brokerage connection: one login at one broker,
 /// usually holding one or more accounts.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Connection {
@@ -727,7 +727,7 @@ mod tests {
         let mut btc = pos(InstrumentKind::Future, "BTC", 0.01, 76_000.0, 70_000.0);
         btc.market = Some("BTCUSD Curncy".into());
         assert_eq!(btc.market_key().as_deref(), Some("BTCUSD Curncy"));
-        // SnapTrade rows have none and keep today's mapping.
+        // Broker rows have none and keep today's mapping.
         assert_eq!(pos(InstrumentKind::Stock, "AAPL", 1.0, 1.0, 1.0).market_key().as_deref(), Some("AAPL US Equity"));
         // Saved data from before the field existed still loads.
         let mut v = serde_json::to_value(pos(InstrumentKind::Stock, "AAPL", 1.0, 1.0, 1.0)).unwrap();

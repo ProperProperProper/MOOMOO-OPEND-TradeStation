@@ -5,7 +5,7 @@
 Status: **Superseded by Local Moomoo OpenD Integration**
 Author: Grok Bot, for Micky. Research date: 2026-10-29. Times are UTC unless marked.
 
-Terminal today fetches all of its own data: Yahoo, Binance and Coinbase websockets, Treasury.gov, Senate eFD and the House Clerk, and SnapTrade. Each desktop process opens its own connections. The browser build serves sample data wherever a source blocks cross-origin requests (`TODO(web proxy)` in `crates/data/src/web.rs` and `crates/congress/src/db_web.rs`). This doc proposes the replacement Micky asked for: **one Rust server that every client (desktop, web, later mobile) connects to, so market data and user state sync in real time**. Hyperliquid is the first market-data source, and the design leaves a clean provider interface for licensed equities and options later.
+Terminal today fetches all of its own data: Yahoo, Binance and Coinbase websockets, Treasury.gov, Senate eFD and the House Clerk, and Moomoo OpenD. Each desktop process opens its own connections. The browser build serves sample data wherever a source blocks cross-origin requests (`TODO(web proxy)` in `crates/data/src/web.rs` and `crates/congress/src/db_web.rs`). This doc proposes the replacement Micky asked for: **one Rust server that every client (desktop, web, later mobile) connects to, so market data and user state sync in real time**. Hyperliquid is the first market-data source, and the design leaves a clean provider interface for licensed equities and options later.
 
 **Decision (Micky, 2026-10-29): Terminal runs on our own Hyperliquid non-validator node(s) and our own systems from day one.** Live data comes only from the node's output files and its local info server: books, trades, candles, mids, marks, oracle prices and funding. The public Hyperliquid API is used for nothing live. At most, it serves a one-time history backfill (§5.6).
 
@@ -49,7 +49,7 @@ How facts are marked:
 
 ### Non-goals (for this design)
 
-- **No trading through the server.** The server is data only. It never signs, routes or places orders on Hyperliquid or anywhere else. The SnapTrade order paths in `crates/broker/src/trading.rs` stay client-side on the desktop, with the user's local credentials. They are unchanged and out of scope (§9). The reasons are the legal flag in §13 (Hyperliquid's Terms of Use) and Micky's steer. The demo account is paper trading against our own quotes and never touches a venue.
+- **No trading through the server.** The server is data only. It never signs, routes or places orders on Hyperliquid or anywhere else. The Moomoo OpenD order paths in `crates/broker/src/trading.rs` stay client-side on the desktop, with the user's local credentials. They are unchanged and out of scope (§9). The reasons are the legal flag in §13 (Hyperliquid's Terms of Use) and Micky's steer. The demo account is paper trading against our own quotes and never touches a venue.
 - No licensed stock or options data yet. Only the interface for it is in scope (§3.1).
 - No public API for third parties. The protocol is for our own clients.
 - No running of a Hyperliquid **validator**. We run non-validators only (§6).
@@ -70,7 +70,7 @@ How facts are marked:
 | Worker | The UI sends `Request` (History, MoreHistory, Quotes, OrderBook, Options, News, Search, Congress queries, Portfolio, Broker*) and drains `Response`, so it never blocks. | `app/src/worker.rs` |
 | Bar cache | SQLite `BarCache` (desktop only). | `crates/data/src/cache.rs` |
 | Congress | Senate eFD and House Clerk ingest into SQLite, refreshed every 30 minutes (`CONGRESS_REFRESH_MIN`). The web build gets an empty stub. | `crates/congress/` |
-| Brokerage | SnapTrade, read-only. The partner keys and the per-user secret live in the Keychain or a 0600 file. | `crates/broker/src/snaptrade.rs`, `secrets.rs` |
+| Brokerage | Moomoo OpenD, read-only. The partner keys and the per-user secret live in the Keychain or a 0600 file. | `crates/broker/src/moomoo.rs`, `secrets.rs` |
 | Demo | `DemoBook` starts with $100k (`STARTING_CASH`) and is saved as local JSON. Orders fill at the terminal's live quote. | `crates/broker/src/demo.rs` |
 | User docs | Layouts (`LayoutDoc` JSON, which holds the panes, their drawings and the watchlist panes), prefs, themes and palette history. They are files on the desktop and `localStorage` in the browser. | `app/src/storage.rs`, `layouts.rs`, `prefs.rs` |
 
@@ -87,7 +87,7 @@ The plan keeps `MarketData` as the *client-side* trait. A new `RemoteMarkets` im
  |   ~/hl/data/node_fills_by_block/...          |          |   hot store (watch/broadcast), refcounts     |
  |   ~/hl/data/node_order_statuses_by_block/... | internal |   auth, subs, conflation, backpressure       |--> desktop
  |   ~/hl/data/node_raw_book_diffs_by_block/... |  stream  |   user sync (docs, drawings, demo book)      |--> web (WASM)
- |   ~/hl/data/hip3_oracle_updates/..., misc_.. |--------->|   Congress, SnapTrade (read-only), others    |--> mobile
+ |   ~/hl/data/hip3_oracle_updates/..., misc_.. |--------->|   Congress, Moomoo OpenD (read-only), others    |--> mobile
  |   localhost:3001/info (subset, fileSnapshot) | tr-proto |   persistence: Postgres/SQLite               |
  | tr-ingest (same host)                        | over     +----------------------------------------------+
  |   file tailers -> book builder (L4->L2/BBO)  | WG/mTLS
@@ -146,7 +146,7 @@ Adapters at launch:
 | `HlNodeProvider` | Our node's output files plus its local info server (`localhost:3001/info`) | §5 and §6. The only live Hyperliquid source. |
 | `HlBackfill` (one-time job) | S3 node archives and/or public `candleSnapshot` | §5.6. Not a live provider. |
 | `CongressProvider` | Senate eFD and House Clerk | Reuses `tr-congress` unchanged (§9) |
-| `SnapTradeProvider` | SnapTrade, read-only server mode | Per-user and private, so it is not a market-data topic. Desktop local mode is unchanged (§9). |
+| `MoomooProvider` | Moomoo OpenD, read-only server mode | Per-user and private, so it is not a market-data topic. Desktop local mode is unchanged (§9). |
 | `CryptoProvider` (existing) | Binance and Coinbase | Off for public display |
 | `TreasuryProvider` (existing) | Treasury.gov, with FRED as fallback | Yield curves |
 
@@ -559,7 +559,7 @@ The interim gateway already filters delistings. Hyperliquid keeps publishing a m
 - **Tokens:** short-lived access tokens (JWT, 15 min [target]) plus refresh tokens, rotated and revocable. The WS `Hello` carries the access token. When it expires, the client re-authenticates in place without dropping subscriptions.
 - **Anonymous mode:** public market data with no sync, which matches today's experience.
 - **Build or buy:** a hosted identity provider (Clerk, WorkOS, Auth0 or Supabase Auth) vs a small self-hosted OAuth layer in Rust. See the open question in §15.
-- **Secrets:** SnapTrade per-user secrets are encrypted at rest (envelope encryption with a KMS or age key). They are never logged and never sent back to clients.
+- **Secrets:** Moomoo OpenD per-user secrets are encrypted at rest (envelope encryption with a KMS or age key). They are never logged and never sent back to clients.
 
 ### 8.2 Documents
 
@@ -584,7 +584,7 @@ The demo book fills at the server's quotes, which come from Hyperliquid perp pri
 | Feed | Today | Server |
 |---|---|---|
 | Congress (Senate eFD, House Clerk) | Each desktop ingests every 30 min. The web gets nothing. | One `CongressProvider` runs `tr_congress::refresh` on schedule into the server DB. Topics: `Congress(Latest)`, `Congress(Ticker)`, `Congress(Politician)`. Tracking alerts are per-user pushes. The web gets the full feature. **Legal note:** the reports carry statutory limits on commercial use (Ethics in Government Act) [unverified for our use; needs legal review]. |
-| SnapTrade | Partner keys (`clientId`, `consumerKey`) and the user secret sit on each machine. The desktop uses them for reads *and* for order preview, place and cancel (`crates/broker/src/trading.rs`). | **Two modes.** (a) *Server mode* (web, mobile, and opt-in desktop): partner keys live only on the server. Each Terminal user maps to a SnapTrade `userId` and an encrypted `userSecret`, and the server proxies only the read-only endpoints (accounts, positions, orders, activities) plus the Connection Portal link. No trading in this mode. (b) *Local mode* (desktop, today's behaviour, unchanged): the local credentials stay in the Keychain or the 0600 file, and the desktop keeps calling SnapTrade directly for reads and for its existing order paths. This design does not migrate or remove local credentials, so existing desktop trading keeps working. Moving trading server-side is out of scope (§1) and would need its own design. |
+| Moomoo OpenD | Partner keys (`clientId`, `consumerKey`) and the user secret sit on each machine. The desktop uses them for reads *and* for order preview, place and cancel (`crates/broker/src/trading.rs`). | **Two modes.** (a) *Server mode* (web, mobile, and opt-in desktop): partner keys live only on the server. Each Terminal user maps to a Moomoo OpenD `userId` and an encrypted `userSecret`, and the server proxies only the read-only endpoints (accounts, positions, orders, activities) plus the Connection Portal link. No trading in this mode. (b) *Local mode* (desktop, today's behaviour, unchanged): the local credentials stay in the Keychain or the 0600 file, and the desktop keeps calling Moomoo OpenD directly for reads and for its existing order paths. This design does not migrate or remove local credentials, so existing desktop trading keeps working. Moving trading server-side is out of scope (§1) and would need its own design. |
 | Yahoo, Treasury, FRED, Alpaca, RSS | Client-side; the web gets sample data | Server-side adapters with `DisplayPolicy` (§3.1). Yahoo and RSS are off for public display until reviewed [unverified]. |
 | Binance and Coinbase crypto | Client-side websockets | Server-side, `public_display: false` (§3.1). Hyperliquid core perps and spot become the default crypto source. |
 
@@ -667,7 +667,7 @@ Egress estimate (per always-on client): a 50-symbol watchlist at 4 Hz × ~30 byt
 | 11 | Auth (sign-in) and accounts. Document sync for layouts, prefs and watchlists, with the conflict rules. | Two devices stay in sync, and conflicts never lose work. |
 | 12 | Drawings (stable ids) and a server-authoritative demo book | Real-time cross-device drawings. One paper book. |
 | 13 | `CongressProvider` server-side. The web gets the Congress panes. | Congress data reaches the web and the stub is deleted. |
-| 14 | `SnapTradeProvider` server-side (read-only server mode). Desktop local mode is left untouched. | Web and mobile get portfolios with no partner secrets in those clients. Desktop trading still works. |
+| 14 | `MoomooProvider` server-side (read-only server mode). Desktop local mode is left untouched. | Web and mobile get portfolios with no partner secrets in those clients. Desktop trading still works. |
 | 15 | Staging and prod deploys for the gateway, plus dashboards and the full alert set | It runs unattended and we can see when it doesn't. |
 | 16 | (Later) a licensed equities and options `Provider` (Intrinio, Twelve Data or Massive) | The provider interface holds up against a second real source. |
 

@@ -1,6 +1,6 @@
 //! Order entry: the order ticket (`BUY`, `SELL`, `TRADE`, ⇧B / ⇧S, Buy/Sell buttons on charts,
 //! watchlist and position rows, the ⌘K palette), the demo account's one-click orders, the
-//! live SnapTrade flow with its single confirmation, cancelling and closing, and
+//! live broker flow with its single confirmation, cancelling and closing, and
 //! Settings › Trading.
 //!
 //! Two accounts modes (Settings › Trading, or the DEMO / LIVE badge in the toolbar):
@@ -8,11 +8,11 @@
 //! * **Demo** (the default): a local paper-trading account with virtual cash. Orders are
 //!   placed with one click and filled against the terminal's quotes; nothing leaves the
 //!   machine.
-//! * **Live**: the brokerage accounts connected through SnapTrade. The safety rails are:
+//! * **Live**: the brokerage accounts connected through Moomoo OpenD. The safety rails are:
 //!   1. Live orders are off until enabled in Settings › Trading, which takes an explicit
 //!      acknowledgement. The ticket still opens, but nothing can be sent.
-//!   2. An order can only be placed from a SnapTrade preview of exactly the ticket's current
-//!      fields; editing anything makes the preview stale. Previews expire before SnapTrade's
+//!   2. An order can only be placed from a broker preview of exactly the ticket's current
+//!      fields; editing anything makes the preview stale. Previews expire before the gateway's
 //!      five-minute limit.
 //!   3. Placing always goes through one confirmation showing account, symbol, side, quantity
 //!      and estimated cost. Escape or a click outside cancels.
@@ -20,7 +20,7 @@
 //!
 //! Trading access (can this connection trade?) is read once per brokerage connection from
 //! `/authorizations`, cached for an hour (also on disk) with a manual refresh, and backs off
-//! quietly when SnapTrade rate-limits.
+//! quietly when rate-limited.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -262,7 +262,7 @@ pub struct TradingState {
     caps_failures: u32,
     /// The last read failed for a reason other than a rate limit.
     pub caps_error: Option<String>,
-    /// SnapTrade is rate-limiting; reads resume after this.
+    /// The gateway is rate-limiting; reads resume after this.
     pub caps_throttled: Option<Instant>,
     /// Simulated orders were placed or cancelled: keep the sample portfolio across refreshes.
     pub sim_trades: bool,
@@ -425,7 +425,7 @@ impl TerminalApp {
     fn caps_pending_note(&self) -> String {
         match (&self.trading.caps_error, self.trading.caps_throttled) {
             (_, Some(at)) if at > Instant::now() => {
-                format!("Checking trading access… SnapTrade is busy, retrying {}.", until(at))
+                format!("Checking trading access… broker is busy, retrying {}.", until(at))
             }
             (Some(e), _) => format!("Could not check trading access ({e}); retrying automatically."),
             _ => "Checking trading access…".into(),
@@ -713,7 +713,7 @@ impl TerminalApp {
         }
         match req.amount {
             Amount::Units(u) if u.fract() != 0.0 && !cap.fractional => {
-                Some(format!("{} does not support fractional shares through SnapTrade.", cap.brokerage))
+                Some(format!("{} does not support fractional shares.", cap.brokerage))
             }
             _ => None,
         }
@@ -1663,7 +1663,7 @@ impl TerminalApp {
             ui.label(RichText::new("Enable live trading?").font(ui_font(16.0)).strong());
             ui.add_space(dp(4.0));
             for line in [
-                "Orders you confirm are sent to your real brokerage account through SnapTrade and can execute immediately with real money.",
+                "Orders you confirm are sent to your real brokerage account through Moomoo OpenD and can execute immediately with real money.",
                 "Market orders fill at the prevailing price, which can differ from the preview. Quotes in Terminal may be delayed.",
                 "Terminal is provided as is, without warranty. You are responsible for every order you place.",
                 "Your brokerage connection must allow trading (reconnect with trading access if it was connected read-only).",
@@ -1902,7 +1902,7 @@ impl TerminalApp {
             }
         });
         note(ui, "Live orders whose estimated value is above the limit are refused before they are sent.");
-        // SnapTrade's accounts only: Hyperliquid has its own section above.
+        // Broker accounts only: Hyperliquid has its own section above.
         let accounts: Vec<Account> = self
             .broker
             .portfolio
@@ -1999,12 +1999,12 @@ impl TerminalApp {
         }
         note(
             ui,
-            "Connections made for portfolio tracking are read-only. To trade, reconnect the broker through SnapTrade's Connection Portal with trading access (supported brokers only).",
+            "Connections made for portfolio tracking are read-only. To trade, reconnect the broker through the Connection Portal with trading access (supported brokers only).",
         );
         ui.horizontal(|ui| {
             if ui
                 .add_enabled(live && !self.trading.portal_busy, egui::Button::new("Reconnect with Trading Access…"))
-                .on_disabled_hover_text("Set up SnapTrade in Settings › Brokerage first")
+                .on_disabled_hover_text("Set up Moomoo OpenD in Settings › Brokerage first")
                 .clicked()
             {
                 self.trading.portal_busy = true;
@@ -2162,8 +2162,8 @@ mod tests {
 
     #[test]
     fn read_only_errors_point_to_reconnecting() {
-        assert!(explain("SnapTrade: User does not have permissions to place trades (403)").contains("Reconnect"));
-        assert_eq!(explain("SnapTrade: Insufficient buying power"), "SnapTrade: Insufficient buying power");
+        assert!(explain("Moomoo OpenD: User does not have permissions to place trades (403)").contains("Reconnect"));
+        assert_eq!(explain("Moomoo OpenD: Insufficient buying power"), "Moomoo OpenD: Insufficient buying power");
     }
 
     #[test]

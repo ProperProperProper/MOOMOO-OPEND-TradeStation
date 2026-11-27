@@ -28,7 +28,7 @@ const COMMANDS: &[(&str, &str, &str, Option<Action>)] = &[
     ("ACTV", "", "activity transactions dividends brokerage", None),
     ("TRADE", "", "order ticket buy sell emsx", None),
     ("PORT REFRESH", "", "brokerage sync reload", None),
-    ("PORT CONNECT", "", "brokerage link snaptrade", None),
+    ("PORT CONNECT", "", "brokerage link moomoo opend", None),
     ("OMON", "", "options chain calls puts greeks", Some(Action::NewOptions)),
     ("CONG", "Congressional trades feed", "congress disclosures", Some(Action::Congress)),
     ("POL", "Politicians", "congress members profile", Some(Action::Politicians)),
@@ -141,7 +141,7 @@ pub(super) fn static_items() -> Vec<Item> {
             "BROKER · Moomoo OpenD Gateway and watchlist",
             Target::Run("BROKER".into()),
         )
-        .keywords("snaptrade keys connect broker"),
+        .keywords("moomoo opend keys connect broker"),
     );
     for (a, words) in
         [(Action::Buy, "trade order ticket purchase long"), (Action::Sell, "trade order ticket close exit")]
@@ -640,7 +640,7 @@ mod tests {
         assert!(has(Kind::Panel, "New Options chain pane"));
         assert!(has(Kind::Action, "Move sidebar to the other side"));
         assert!(has(Kind::Action, "Open Brokerage settings"));
-        assert!(has(Kind::Action, "Buy the current security") && has(Kind::Action, "Switch to live accounts"));
+        assert!(has(Kind::Action, "Buy the current security") && has(Kind::Action, "Switch to Live Moomoo Accounts"));
         assert!(has(Kind::Layout, "Grid preset 4"));
         for tab in SettingsTab::ALL {
             assert!(has(Kind::Settings, &format!("Settings › {}", tab.label())));

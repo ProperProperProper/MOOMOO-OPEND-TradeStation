@@ -20,6 +20,7 @@ pub enum PortAction {
     Refresh,
     Connect,
     Setup,
+    #[allow(dead_code)]
     Open(&'static str),
     /// `OMON` for a market key.
     Options(String),
@@ -306,7 +307,7 @@ pub fn portfolio(
         None => (b.mode(), b.portfolio.as_deref(), b.error.as_ref()),
     };
     match (mode, pf) {
-        // Without SnapTrade the panes still show a Hyperliquid account.
+        // Without broker connections the panes still show a Hyperliquid account.
         (BrokerMode::Setup, pf) if pf.is_none_or(|p| p.accounts.is_empty()) => setup_screen(ui, b, &mut out),
         (_, None) if b.loading => {
             ui.horizontal(|ui| {
@@ -977,7 +978,7 @@ fn orders(ui: &mut Ui, pane: &mut PortfolioPane, pf: &Portfolio, out: &mut Vec<P
                 ui,
                 format!(
                     "Last {} days · hover or right-click an open order to cancel it",
-                    tr_broker::snaptrade::ORDER_DAYS
+                    tr_broker::ORDER_DAYS
                 ),
             );
         }
@@ -1084,7 +1085,7 @@ fn orders(ui: &mut Ui, pane: &mut PortfolioPane, pf: &Portfolio, out: &mut Vec<P
 fn activity(ui: &mut Ui, pane: &mut PortfolioPane, pf: &Portfolio, out: &mut Vec<PortAction>) {
     note(
         ui,
-        format!("Last {} days: trades, dividends, interest, transfers and fees", tr_broker::snaptrade::ACTIVITY_DAYS),
+        format!("Last {} days: trades, dividends, interest, transfers and fees", tr_broker::ACTIVITY_DAYS),
     );
     let sel = selected(pane);
     let list: Vec<_> =
@@ -1201,7 +1202,7 @@ mod tests {
     fn renders_every_view_without_panicking() {
         let ctx = egui::Context::default();
         // A store that holds nothing, so the test never reads (or moves) the user's Keychain item.
-        let none = std::env::temp_dir().join(format!("tr-portfolio-test-{}/snaptrade.json", std::process::id()));
+        let none = std::env::temp_dir().join(format!("tr-portfolio-test-{}/moomoo.json", std::process::id()));
         let mut b = BrokerState::with_store(tr_broker::SecretStore::file(none), true);
         b.creds = tr_broker::Credentials::default();
         b.portfolio = Some(Box::new(tr_broker::sample::portfolio()));

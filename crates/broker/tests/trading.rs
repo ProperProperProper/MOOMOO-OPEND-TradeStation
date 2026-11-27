@@ -1,5 +1,5 @@
-//! Order entry against a local mock of the SnapTrade trading API. No test here talks to
-//! SnapTrade or a broker: every client points at `127.0.0.1`, and the mock checks each
+//! Order entry against a local mock of the Moomoo OpenD trading API. No test here talks to
+//! external services: every client points at `127.0.0.1`, and the mock checks each
 //! request's signature and user credentials before answering with captured-shape responses.
 
 use std::sync::{Arc, Mutex};
@@ -7,9 +7,9 @@ use std::sync::{Arc, Mutex};
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
-use tr_broker::snaptrade::signature;
+use tr_broker::moomoo::signature;
 use tr_broker::trading::{Amount, OrderRequest, OrderType, Side, TimeInForce};
-use tr_broker::{Credentials, SnapTrade};
+use tr_broker::{Credentials, MoomooClient};
 
 const CONSUMER_KEY: &str = "trading-test-consumer-key";
 const ACCT: &str = "917c8734-8470-4a3e-a18f-57c3f2ee6631";
@@ -139,8 +139,8 @@ async fn mock(seen: Log, failures: Log) -> String {
                                 "brokerage": {"slug": "WEALTHSIMPLETRADE", "display_name": "Wealthsimple",
                                               "allows_trading": true, "allows_fractional_units": true}}]),
                     ),
-                    ("POST", "/snapTrade/login") => {
-                        (200, json!({"redirectURI": "https://app.snaptrade.com/snapTrade/redeemToken?token=t"}))
+                    ("POST", "/broker/login") => {
+                        (200, json!({"redirectURI": "http://127.0.0.1:11111/broker/redeemToken?token=t"}))
                     }
                     _ => (404, json!({"detail": "Not found"})),
                 };
@@ -157,14 +157,14 @@ async fn mock(seen: Log, failures: Log) -> String {
     format!("http://{addr}")
 }
 
-fn client(base: &str) -> SnapTrade {
+fn client(base: &str) -> MoomooClient {
     let creds = Credentials {
         client_id: "TEST-CLIENT".into(),
         consumer_key: CONSUMER_KEY.into(),
         user_id: "terminal-test".into(),
         user_secret: "s3cr3t".into(),
     };
-    SnapTrade::with_base(creds, base).unwrap()
+    MoomooClient::with_base(creds, base).unwrap()
 }
 
 fn limit_buy() -> OrderRequest {
@@ -199,7 +199,7 @@ async fn previews_places_and_cancels_against_the_mock() {
 
     c.cancel_order(ACCT, "66844").await.unwrap();
     let url = c.trading_portal_url(true).await.unwrap();
-    assert!(url.starts_with("https://app.snaptrade.com/"));
+    assert!(url.starts_with("http://127.0.0.1:11111/"));
 
     assert!(failures.lock().unwrap().is_empty(), "unsigned or unauthenticated: {:?}", failures.lock().unwrap());
     let seen = seen.lock().unwrap().clone();
@@ -211,7 +211,7 @@ async fn previews_places_and_cancels_against_the_mock() {
             "/trade/impact",
             format!("/trade/{TRADE_ID}").as_str(),
             format!("/accounts/{ACCT}/trading/cancel").as_str(),
-            "/snapTrade/login",
+            "/broker/login",
         ]
     );
     assert!(seen.iter().all(|s| s.method == "POST"));

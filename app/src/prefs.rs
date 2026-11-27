@@ -195,7 +195,7 @@ impl Default for PanelDefaults {
 }
 
 /// Which account the terminal trades and shows: the local paper-trading demo account, or
-/// the real brokerage accounts connected through SnapTrade.
+/// the real brokerage accounts connected through Moomoo OpenD.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum AccountMode {
     #[default]
@@ -220,7 +220,7 @@ pub struct TradingPrefs {
     pub hl: HlPrefs,
 }
 
-/// Hyperliquid order entry. Separate from SnapTrade's `enabled`: turning one on never turns on
+/// Hyperliquid order entry. Separate from the broker's `enabled`: turning one on never turns on
 /// the other. Holds only public data: the agent's private key lives in the OS secret store.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -719,7 +719,7 @@ pub struct Prefs {
     pub appearance: Appearance,
     pub hotkeys: Keymap,
     pub panels: PanelDefaults,
-    /// Order entry through SnapTrade (off unless the user turns it on).
+    /// Order entry through Moomoo OpenD (off unless the user turns it on).
     pub trading: TradingPrefs,
     /// A custom theme built from v2 appearance overrides, for the app to save.
     #[serde(skip)]

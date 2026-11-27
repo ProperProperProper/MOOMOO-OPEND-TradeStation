@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::model::{Account, Activity, InstrumentKind, Order, Portfolio, Position};
 use crate::trading::{Amount, OrderRequest, OrderType, Side, TimeInForce, clean_symbol, fmt_units};
 
-/// The demo account's id (never a SnapTrade id, which are UUIDs).
+/// The demo account's id (never a broker UUID).
 pub const ACCOUNT_ID: &str = "demo-paper";
 /// Virtual cash a new or reset demo account starts with.
 pub const STARTING_CASH: f64 = 100_000.0;

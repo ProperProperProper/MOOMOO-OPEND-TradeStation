@@ -1,9 +1,9 @@
-//! SnapTrade credentials and where they are kept.
+//! Moomoo OpenD credentials and where they are kept.
 //!
 //! The partner keys (`clientId`, `consumerKey`) and the per-user `userId`/`userSecret` are
 //! stored together as one small JSON document: in the macOS Keychain (generic password,
-//! service `terminal`, account `snaptrade`), or elsewhere in an owner-only (0600) file in
-//! the app's data directory. `SNAPTRADE_*` environment variables override stored values
+//! service `terminal`, account `moomoo`), or elsewhere in an owner-only (0600) file in
+//! the app's data directory. `MOOMOO_*` environment variables override stored values
 //! field by field. Nothing is ever written inside the repository.
 //!
 //! Before the app was renamed from terminal-rs, the Keychain service was `terminal-rs`; the
@@ -18,13 +18,13 @@ use serde::{Deserialize, Serialize};
 pub const KEYCHAIN_SERVICE: &str = "terminal";
 /// The service credentials were saved under before the rename.
 pub const LEGACY_KEYCHAIN_SERVICE: &str = "terminal-rs";
-pub const KEYCHAIN_ACCOUNT: &str = "snaptrade";
+pub const KEYCHAIN_ACCOUNT: &str = "moomoo";
 
 /// Environment variables that override stored credentials.
-pub const ENV_CLIENT_ID: &str = "SNAPTRADE_CLIENT_ID";
-pub const ENV_CONSUMER_KEY: &str = "SNAPTRADE_CONSUMER_KEY";
-pub const ENV_USER_ID: &str = "SNAPTRADE_USER_ID";
-pub const ENV_USER_SECRET: &str = "SNAPTRADE_USER_SECRET";
+pub const ENV_CLIENT_ID: &str = "MOOMOO_CLIENT_ID";
+pub const ENV_CONSUMER_KEY: &str = "MOOMOO_CONSUMER_KEY";
+pub const ENV_USER_ID: &str = "MOOMOO_USER_ID";
+pub const ENV_USER_SECRET: &str = "MOOMOO_USER_SECRET";
 
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Credentials {
@@ -45,7 +45,7 @@ impl Credentials {
         !self.client_id.trim().is_empty() && !self.consumer_key.trim().is_empty()
     }
 
-    /// A SnapTrade user is registered (commercial keys) or not needed (personal keys).
+    /// A user is registered or not needed (personal keys).
     pub fn has_user(&self) -> bool {
         !self.user_id.trim().is_empty() && !self.user_secret.trim().is_empty()
     }
@@ -55,7 +55,7 @@ impl Credentials {
         self.has_keys() && (self.has_user() || (self.user_id.trim().is_empty() && self.user_secret.trim().is_empty()))
     }
 
-    /// Fill fields from `SNAPTRADE_*` variables where they are set. Returns whether any were.
+    /// Fill fields from `MOOMOO_*` variables where they are set. Returns whether any were.
     pub fn apply_env(&mut self, get: impl Fn(&str) -> Option<String>) -> bool {
         let mut any = false;
         for (var, field) in [
@@ -120,9 +120,9 @@ pub struct SecretStore {
 
 impl SecretStore {
     /// The platform store: the Keychain on macOS (unless `TR_SECRET_STORE=file`), otherwise
-    /// `<data_dir>/secrets/snaptrade.json`.
+    /// `<data_dir>/secrets/moomoo.json`.
     pub fn platform(data_dir: &Path) -> Self {
-        let file = Backend::File(data_dir.join("secrets").join("snaptrade.json"));
+        let file = Backend::File(data_dir.join("secrets").join("moomoo.json"));
         let force_file = std::env::var("TR_SECRET_STORE").is_ok_and(|v| v.eq_ignore_ascii_case("file"));
         let backend = if cfg!(target_os = "macos") && !force_file {
             Backend::Keychain { service: KEYCHAIN_SERVICE.into(), legacy: Some(LEGACY_KEYCHAIN_SERVICE.into()) }
@@ -160,7 +160,7 @@ impl SecretStore {
         };
         match text {
             Some(t) if !t.trim().is_empty() => {
-                Ok(Some(serde_json::from_str(&t).context("SnapTrade credentials are not valid JSON")?))
+                Ok(Some(serde_json::from_str(&t).context("Moomoo credentials are not valid JSON")?))
             }
             _ => Ok(None),
         }
@@ -200,10 +200,10 @@ fn load_keychain(service: &str, legacy: Option<&str>) -> Result<Option<String>> 
     let Some(text) = keychain::get(legacy)? else { return Ok(None) };
     match keychain::set(service, &text) {
         Ok(()) => match keychain::delete(legacy) {
-            Ok(()) => tracing::info!("moved SnapTrade credentials from Keychain service {legacy} to {service}"),
-            Err(e) => tracing::warn!("removing SnapTrade credentials from Keychain service {legacy}: {e:#}"),
+            Ok(()) => tracing::info!("moved Moomoo credentials from Keychain service {legacy} to {service}"),
+            Err(e) => tracing::warn!("removing Moomoo credentials from Keychain service {legacy}: {e:#}"),
         },
-        Err(e) => tracing::warn!("moving SnapTrade credentials to Keychain service {service}: {e:#}"),
+        Err(e) => tracing::warn!("moving Moomoo credentials to Keychain service {service}: {e:#}"),
     }
     Ok(Some(text))
 }
@@ -308,7 +308,7 @@ mod keychain {
 // ---- Hyperliquid agent keys ----------------------------------------------------------------
 
 /// The Keychain service (and Secret Service attribute) for Hyperliquid agent keys, apart
-/// from the SnapTrade item.
+/// from the primary broker item.
 pub const HL_KEYCHAIN_SERVICE: &str = "terminal.hyperliquid";
 
 /// Where Hyperliquid agent (API wallet) keys live: the macOS Keychain, the Linux Secret
@@ -530,7 +530,7 @@ mod tests {
     #[test]
     fn file_store_round_trip_is_private() {
         let dir = std::env::temp_dir().join(format!("tr-broker-secrets-{}", std::process::id()));
-        let store = SecretStore::file(dir.join("secrets/snaptrade.json"));
+        let store = SecretStore::file(dir.join("secrets/moomoo.json"));
         assert_eq!(store.load().unwrap(), None);
         let mut c = creds();
         c.client_id = "  PARTNER-ID ".into();
@@ -539,7 +539,7 @@ mod tests {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(dir.join("secrets/snaptrade.json")).unwrap().permissions().mode();
+            let mode = std::fs::metadata(dir.join("secrets/moomoo.json")).unwrap().permissions().mode();
             assert_eq!(mode & 0o777, 0o600);
             let dmode = std::fs::metadata(dir.join("secrets")).unwrap().permissions().mode();
             assert_eq!(dmode & 0o777, 0o700);

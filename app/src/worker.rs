@@ -41,9 +41,10 @@ const RELOAD_AFTER_FEED_ENDS: Duration = Duration::from_secs(5);
 const PERP_RETRY: Duration = if cfg!(test) { Duration::from_millis(100) } else { Duration::from_secs(10) };
 
 pub enum Request {
-    /// Load the brokerage portfolio through SnapTrade (`None` = the simulated sample).
+    /// Load the brokerage portfolio (`None` = the simulated sample).
     Portfolio(Option<tr_broker::Credentials>),
-    /// Register a SnapTrade user under the partner keys.
+    /// Register a broker user under the credentials.
+    #[allow(dead_code)]
     BrokerRegister {
         creds: tr_broker::Credentials,
         user_id: String,
@@ -55,6 +56,7 @@ pub enum Request {
         reconnect: Option<String>,
     },
     /// Remove a brokerage connection at the user's explicit request.
+    #[allow(dead_code)]
     BrokerDisconnect {
         creds: tr_broker::Credentials,
         id: String,
@@ -152,7 +154,7 @@ pub enum Request {
     Wallet(crate::wallet_worker::WalletRequest),
 }
 
-/// A trading call through SnapTrade. Previews never place anything; placing takes a preview
+/// A trading call through the broker gateway. Previews never place anything; placing takes a preview
 /// the user confirmed.
 pub enum TradeRequest {
     Preview {
@@ -198,7 +200,7 @@ pub enum TradeResponse {
         result: Result<(), String>,
     },
     Portal(Result<String, String>),
-    /// Capabilities by connection (SnapTrade authorization) id.
+    /// Capabilities by connection authorization id.
     Capabilities(Result<std::collections::HashMap<String, tr_broker::trading::Capability>, CapsError>),
 }
 
@@ -226,7 +228,7 @@ pub struct Profile {
 
 pub enum Response {
     Portfolio(Result<Box<tr_broker::Portfolio>, String>),
-    /// `(userId, userSecret)` for a newly registered SnapTrade user.
+    /// `(userId, userSecret)` for a newly registered broker user.
     BrokerRegistered(Result<(String, String), String>),
     BrokerPortal(Result<String, String>),
     /// The connection id removed, or why not.
@@ -765,7 +767,7 @@ async fn handle(s: &Arc<Shared>, req: Request) {
         Request::Portfolio(creds) => {
             let result = match creds {
                 None => Ok(tr_broker::sample::portfolio()),
-                Some(c) => match tr_broker::SnapTrade::new(c) {
+                Some(c) => match tr_broker::MoomooClient::new(c) {
                     Ok(client) => client.portfolio().await,
                     Err(e) => Err(e),
                 },
@@ -773,21 +775,21 @@ async fn handle(s: &Arc<Shared>, req: Request) {
             s.send(Response::Portfolio(result.map(Box::new).map_err(|e| format!("{e:#}"))));
         }
         Request::BrokerRegister { creds, user_id } => {
-            let result = match tr_broker::SnapTrade::new(creds) {
+            let result = match tr_broker::MoomooClient::new(creds) {
                 Ok(client) => client.register_user(&user_id).await,
                 Err(e) => Err(e),
             };
             s.send(Response::BrokerRegistered(result.map_err(|e| format!("{e:#}"))));
         }
         Request::BrokerPortal { creds, dark, reconnect } => {
-            let result = match tr_broker::SnapTrade::new(creds) {
+            let result = match tr_broker::MoomooClient::new(creds) {
                 Ok(client) => client.connection_portal_url(dark, reconnect.as_deref()).await,
                 Err(e) => Err(e),
             };
             s.send(Response::BrokerPortal(result.map_err(|e| format!("{e:#}"))));
         }
         Request::BrokerDisconnect { creds, id } => {
-            let result = match tr_broker::SnapTrade::new(creds) {
+            let result = match tr_broker::MoomooClient::new(creds) {
                 Ok(client) => client.delete_connection(&id).await,
                 Err(e) => Err(e),
             };
@@ -827,7 +829,7 @@ async fn handle(s: &Arc<Shared>, req: Request) {
 
 async fn trade(t: TradeRequest) -> TradeResponse {
     let err = |e: anyhow::Error| format!("{e:#}");
-    let client = |creds| tr_broker::SnapTrade::new(creds).map_err(err);
+    let client = |creds| tr_broker::MoomooClient::new(creds).map_err(err);
     match t {
         TradeRequest::Preview { creds, req, ticket } => {
             let result = match client(creds) {
@@ -856,7 +858,7 @@ async fn trade(t: TradeRequest) -> TradeResponse {
         }),
         TradeRequest::Capabilities { creds } => TradeResponse::Capabilities(match client(creds) {
             Ok(c) => c.connection_capabilities().await.map_err(|e| {
-                let throttle = tr_broker::snaptrade::throttle(&e);
+                let throttle = tr_broker::moomoo::throttle(&e);
                 CapsError { message: err(e), throttled: throttle.is_some(), retry_after: throttle.flatten() }
             }),
             Err(message) => Err(CapsError { message, throttled: false, retry_after: None }),

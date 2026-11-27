@@ -1,5 +1,5 @@
-//! SnapTrade rate limits: throttled reads wait as asked and retry, throttled orders are never
-//! resent, and the error the user sees is a friendly line rather than SnapTrade's raw text.
+//! Moomoo OpenD rate limits: throttled reads wait as asked and retry, throttled orders are never
+//! resent, and the error the user sees is a friendly line rather than raw error text.
 //! (Its own test binary: the client's cooldown is process-wide.)
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -9,7 +9,7 @@ use std::time::Instant;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tr_broker::trading::{Amount, OrderPreview, OrderRequest, OrderType, PlaceError, Side, SymbolMatch, TimeInForce};
-use tr_broker::{Credentials, SnapTrade};
+use tr_broker::{Credentials, MoomooClient};
 
 const THROTTLED: &str = r#"{"detail":"Request was throttled. Expected available in 1 seconds."}"#;
 
@@ -54,14 +54,14 @@ async fn mock(throttle_reads: usize, seen: Arc<Mutex<Vec<String>>>) -> String {
     format!("http://{addr}")
 }
 
-fn client(base: &str) -> SnapTrade {
+fn client(base: &str) -> MoomooClient {
     let creds = Credentials {
         client_id: "TEST".into(),
         consumer_key: "key".into(),
         user_id: "terminal-test".into(),
         user_secret: "s".into(),
     };
-    SnapTrade::with_base(creds, base).unwrap()
+    MoomooClient::with_base(creds, base).unwrap()
 }
 
 #[tokio::test]
@@ -80,9 +80,9 @@ async fn throttled_reads_retry_and_orders_are_never_resent() {
     let base = mock(usize::MAX, seen.clone()).await;
     let e = client(&base).connection_capabilities().await.unwrap_err();
     let msg = format!("{e:#}");
-    assert!(tr_broker::snaptrade::throttle(&e).is_some());
+    assert!(tr_broker::moomoo::throttle(&e).is_some());
     assert!(msg.contains("rate-limiting") && !msg.contains("Request was throttled"), "{msg}");
-    assert_eq!(seen.lock().unwrap().len(), 1 + tr_broker::snaptrade::MAX_RETRIES as usize);
+    assert_eq!(seen.lock().unwrap().len(), 1 + tr_broker::moomoo::MAX_RETRIES as usize);
 
     // A throttled placement is sent exactly once and reported as not placed.
     let seen = Arc::new(Mutex::new(Vec::new()));
@@ -140,7 +140,7 @@ async fn throttled_reads_retry_and_orders_are_never_resent() {
     let seen = Arc::new(Mutex::new(Vec::new()));
     let base = mock_retry_after(120, seen.clone()).await;
     let e = client(&base).connection_capabilities().await.unwrap_err();
-    assert!(tr_broker::snaptrade::throttle(&e).flatten().is_some_and(|d| d.as_secs() >= 100));
+    assert!(tr_broker::moomoo::throttle(&e).flatten().is_some_and(|d| d.as_secs() >= 100));
     let start = Instant::now();
     let e = client(&base).place_previewed(&preview).await.unwrap_err();
     assert!(start.elapsed().as_secs() < 5, "an order is never held for minutes");

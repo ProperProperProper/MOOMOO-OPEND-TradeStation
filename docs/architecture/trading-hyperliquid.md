@@ -6,7 +6,7 @@
 Status: **Superseded by Moomoo OpenD Integration**
 Author: Grok Bot, for Micky; v1 by Claude. Research date: 2026-11-02 (read-only calls about 23:30 UTC). Times are UTC unless marked.
 
-Micky asked: *"i wanna enable crypto trading and stocks (via hyperliquid)"*. This doc designs order entry on Hyperliquid from Terminal's desktop app and the WASM web build. That covers crypto (core perps such as `BTC`, and spot such as `HYPE/USDC`) and the HIP-3 equity perps the terminal already shows (`xyz:AAPL`, labelled `PERP · HL xyz`). It fits the order entry that exists today: the demo account, the SnapTrade opt-in, the `PORT`/`POS`/`ORD`/`ACTV` panes and the order ticket.
+Micky asked: *"i wanna enable crypto trading and stocks (via hyperliquid)"*. This doc designs order entry on Hyperliquid from Terminal's desktop app and the WASM web build. That covers crypto (core perps such as `BTC`, and spot such as `HYPE/USDC`) and the HIP-3 equity perps the terminal already shows (`xyz:AAPL`, labelled `PERP · HL xyz`). It fits the order entry that exists today: the demo account, the Moomoo OpenD opt-in, the `PORT`/`POS`/`ORD`/`ACTV` panes and the order ticket.
 
 **Read §12 (legal) first.** Hyperliquid's Terms of Use name Ontario, Canada as a restricted region. This needs a decision from Micky before any phase touches mainnet, and it affects how testnet can be funded too. Micky's answer for now (§15): build and demo on testnet; legal review before mainnet.
 
@@ -36,7 +36,7 @@ Evidence tags used below:
 - No deposits, withdrawals or transfers in v1. Users fund the account on Hyperliquid themselves. (`usdClassTransfer` between spot and perp may come later, §11.)
 - No vaults, sub-accounts, multi-sig, staking, TWAP or outcome markets in v1.
 - No automated or algorithmic trading. Every order starts from a human click or command.
-- No change to the demo account or to SnapTrade.
+- No change to the demo account or to Moomoo OpenD.
 
 ---
 
@@ -44,15 +44,15 @@ Evidence tags used below:
 
 | Piece | Today | Where |
 |---|---|---|
-| Account modes | `AccountMode::{Demo, Live}`. Demo is the default: one-click orders filled locally against the terminal's quotes. Live means SnapTrade. The toolbar shows a `DEMO`/`LIVE` badge. | `app/src/prefs.rs`, `app/src/app/chrome.rs` [repo] |
+| Account modes | `AccountMode::{Demo, Live}`. Demo is the default: one-click orders filled locally against the terminal's quotes. Live means Moomoo OpenD. The toolbar shows a `DEMO`/`LIVE` badge. | `app/src/prefs.rs`, `app/src/app/chrome.rs` [repo] |
 | Opt-in | `TradingPrefs { account_mode, enabled, max_order_value, default_account }`. Live orders stay off until Settings › Trading is enabled, behind an acknowledgement dialog ("I understand that orders are real…"). | `app/src/prefs.rs`, `app/src/app/trading.rs` `enable_dialog` [repo] |
 | Order ticket | `Ticket` (symbol, side, `OrderType::{Market, Limit, Stop, StopLimit}`, `TimeInForce::{Day, Gtc, Fok, Ioc}`, units or dollars, `SELL ALL`). It opens from `BUY`/`SELL`/`TRADE`, ⇧B/⇧S, chart, watchlist and position rows, and the ⌘K palette. | `app/src/app/trading.rs` [repo] |
 | Live safety rails | (1) off until enabled; (2) an order can only be placed from a broker preview of exactly the current fields; (3) one confirmation showing account, symbol, side, quantity and estimated cost; (4) an optional maximum order value. | `app/src/app/trading.rs` module docs [repo] |
 | Worker | The UI sends `Request::Trade(TradeRequest::{Preview, Place, Cancel, Portal, Capabilities})` and drains `TradeResponse`, so it never blocks. In the browser the same requests run as tasks on the page's event loop. | `app/src/worker.rs` [repo] |
-| Broker crate | `tr-broker`: the SnapTrade client, the `Portfolio`/`Account`/`Position`/`Order` model, `DemoBook`, and `SecretStore` (macOS Keychain service `terminal`, otherwise an owner-only JSON file). `Credentials` has a redacting `Debug` and `mask()`. | `crates/broker/src/*.rs` [repo] |
+| Broker crate | `tr-broker`: the Moomoo OpenD client, the `Portfolio`/`Account`/`Position`/`Order` model, `DemoBook`, and `SecretStore` (macOS Keychain service `terminal`, otherwise an owner-only JSON file). `Credentials` has a redacting `Debug` and `mask()`. | `crates/broker/src/*.rs` [repo] |
 | Market data | `tr-gateway` (`wss://gateway.rasmic.xyz/ws`) relays Hyperliquid's public websocket. `tr-proto` `MarketInfo { key, venue, kind: Perp \| Spot }`. HIP-3 perps are instruments of their own, labelled `PERP · HL xyz`, never resolved from `AAPL US Equity`. | `crates/proto/src/lib.rs`, `server/src/hl/`, `server.md` §7 [repo] |
 
-The design reuses all of this. Hyperliquid becomes a **third account source** next to Demo and SnapTrade, with its own opt-in, so enabling SnapTrade live orders never enables Hyperliquid orders, or the reverse.
+The design reuses all of this. Hyperliquid becomes a **third account source** next to Demo and Moomoo OpenD, with its own opt-in, so enabling Moomoo OpenD live orders never enables Hyperliquid orders, or the reverse.
 
 ---
 
@@ -121,7 +121,7 @@ Hyperliquid warns that hand-rolled signatures fail silently: a wrong signature r
 ### 4.1 Turning it on
 
 1. Settings › Trading › **Hyperliquid** (new section; off by default). This build has **testnet only**: no network selector, no mainnet URL, no switch. Mainnet comes in phase 4, after §12, in a build made for it (§8).
-2. A first-run acknowledgement like the SnapTrade `enable_dialog` [repo], with Hyperliquid-specific lines: orders are irreversible on-chain transactions; perps are leveraged and can be liquidated; HIP-3 stock markets are perpetual futures, not shares; Hyperliquid's Terms restrict some regions, including Ontario (§12), and you are responsible for whether you may use it.
+2. A first-run acknowledgement like the Moomoo OpenD `enable_dialog` [repo], with Hyperliquid-specific lines: orders are irreversible on-chain transactions; perps are leveraged and can be liquidated; HIP-3 stock markets are perpetual futures, not shares; Hyperliquid's Terms restrict some regions, including Ontario (§12), and you are responsible for whether you may use it.
 3. **Create wallet / Sign in** (§4.5): the browser opens Terminal's sign-in page, and the user's built-in wallet appears in Settings. Its address is the master address, used for reads and display. "Watch an address" still shows any testnet account read-only, with no key involved, so `PORT`/`POS`/`ORD` light up with live data and no trading.
 
 ### 4.2 Approving the agent (one main-wallet signature)
@@ -339,7 +339,7 @@ The rules from `server.md` §7 carry over to trading [repo]:
 
 | Rail | Design |
 |---|---|
-| Off by default | `prefs.trading.hl.enabled = false`, separate from SnapTrade's `enabled`. The Hyperliquid account is read-only until enabled with its acknowledgement (§4.1). |
+| Off by default | `prefs.trading.hl.enabled = false`, separate from Moomoo OpenD's `enabled`. The Hyperliquid account is read-only until enabled with its acknowledgement (§4.1). |
 | Testnet only (v1) | `Network` has one variant, `Testnet`. The endpoints are the testnet hosts, the phantom agent's `source` is always `"b"` and `hyperliquidChain` always `"Testnet"`; a stored `"network": "mainnet"` reads as testnet. Tests grep `tr-hl` for mainnet hosts. Mainnet needs a later build after §12, with its own acknowledgement. The amber TESTNET badge is on the toolbar, the account, the ticket and every confirmation. |
 | Main wallet (built-in) | The Turnkey wallet signs only `approveAgent`, through `tr_hl::signing::sign_approve_agent_with`: Turnkey is handed the digest of a testnet approval at 0x66eee and nothing else, and the signature must recover the wallet before it is sent. Turnkey sessions last 15 minutes, are bound to a key made on the device, and never reach a log (§4.5). |
 | Confirmation | One per order, cancel-all and leverage change (§6.3). Enter confirms; Escape or a click outside cancels, as today [repo]. |
@@ -349,7 +349,7 @@ The rules from `server.md` §7 carry over to trading [repo]:
 | Nonces | One agent per device and network (nonces are tracked per signer; "use a separate private key" per session [doc: NONCE]). The nonce is an atomic `max(last + 1, now_ms)`, within (T − 2 days, T + 1 day) [doc: NONCE]. A noop (`{"type": "noop"}`) can invalidate an in-flight nonce [doc: EXCH]. |
 | Uncertain results | A network error after send means "uncertain", never "failed". Reconcile by `cloid` via `orderStatus` and `orderUpdates` before allowing a resend (same idea as `PlaceError::uncertain` [repo]). Every `/info` and `/exchange` request has its own 10 s deadline, in the browser too (`fetch` has no default timeout); an `/exchange` request that runs out of time is uncertain. |
 | Never log keys | `AgentKey` is a newtype with redacted `Debug`/`Display` (like `Credentials` and `mask()` [repo]) and is zeroized on drop. It is never serialized into prefs, layouts or the demo JSON. Signed request bodies are not logged; logs carry `cloid`, `oid`, asset and status only. Unit test: a `tracing` capture of a full place/cancel cycle contains no 64-hex-digit secrets. |
-| Rate limits | Address-based limit: 1 request per 1 USDC traded since inception, plus an initial buffer of 10,000; when limited, 1 request every 10 s [doc: RL]. A human-driven terminal stays far below this. Terminal reads `userRateLimit` [doc: INFO] and surfaces it in Settings, and backs off quietly on 429s, as the SnapTrade capabilities code does [repo]. |
+| Rate limits | Address-based limit: 1 request per 1 USDC traded since inception, plus an initial buffer of 10,000; when limited, 1 request every 10 s [doc: RL]. A human-driven terminal stays far below this. Terminal reads `userRateLimit` [doc: INFO] and surfaces it in Settings, and backs off quietly on 429s, as the Moomoo OpenD capabilities code does [repo]. |
 
 ---
 
@@ -384,24 +384,24 @@ So `PORT`/`POS`/`ORD`/`ACTV` render HL with modest UI change, **but the market l
 
 As modelled above, an HL perp row would have no live repricing, no chart link and no trade buttons. The integration therefore adds:
 
-1. **A venue-native market key on `Position`.** A new optional, serde-defaulted field (`market: Option<String>`) that the HL adapter fills with the exact key the gateway publishes in `MarketInfo.key` (`xyz:AAPL` for HIP-3, the core-perp and spot keys as `tr-proto` names them) [repo]. `Position::market_key()` returns it before falling back to today's kind-based mapping, so SnapTrade and demo rows are unchanged. HIP-3 keys resolve through `Security::perp` (`AssetClass::Perp`) [repo: `crates/core/src/security.rs`], never through the stock path.
+1. **A venue-native market key on `Position`.** A new optional, serde-defaulted field (`market: Option<String>`) that the HL adapter fills with the exact key the gateway publishes in `MarketInfo.key` (`xyz:AAPL` for HIP-3, the core-perp and spot keys as `tr-proto` names them) [repo]. `Position::market_key()` returns it before falling back to today's kind-based mapping, so Moomoo OpenD and demo rows are unchanged. HIP-3 keys resolve through `Security::perp` (`AssetClass::Perp`) [repo: `crates/core/src/security.rs`], never through the stock path.
 2. **Repricing from that key, kept separate per network.** Mainnet HL rows reprice through today's path: `live_price` reads the shared quote map, which `broker_periodic` fills from the gateway [repo]. Testnet rows **must not** use that map. Testnet and mainnet use the same market keys (`xyz:AAPL`), so either network's price could overwrite the other's. The plan:
    - a separate `testnet_quotes` map owned by the HL adapter, filled only from testnet `allMids` (per dex);
    - `live_price` takes the account's network (from `Account.is_paper` / the HL account's network) and reads only the matching map;
-   - `broker_periodic` requests gateway quotes only for keys from mainnet accounts (and SnapTrade/demo), never for testnet rows;
+   - `broker_periodic` requests gateway quotes only for keys from mainnet accounts (and Moomoo OpenD/demo), never for testnet rows;
    - the ticket's reference price, fee and liquidation estimates use the same network-selected source (§6.2);
    - tests feed interleaved mainnet and testnet updates for the same key and assert each row and ticket reads only its own network.
 3. **Row actions.** The `tradable` check in `portfolio_view.rs` also allows rows from an enabled HL account that have a `market`. Close sends a reduce-only order (§6.1), through the same confirmation (§6.3). Chart and key menus use `market`.
-4. **Tests.** Unit tests for `market_key()` precedence (an HL row with `market` set, a SnapTrade `Future` row still `None`), and `live_price` tests with perp quotes on both networks.
+4. **Tests.** Unit tests for `market_key()` precedence (an HL row with `market` set, a Moomoo OpenD `Future` row still `None`), and `live_price` tests with perp quotes on both networks.
 
-Unrealized PnL is then repriced from the gateway's live marks on mainnet, or testnet mids on testnet, as the panes already do for SnapTrade rows that have a key [repo]. Realized PnL = Σ `closedPnl` − Σ `fee` over the selected range, with funding shown separately.
+Unrealized PnL is then repriced from the gateway's live marks on mainnet, or testnet mids on testnet, as the panes already do for Moomoo OpenD rows that have a key [repo]. Realized PnL = Σ `closedPnl` − Σ `fee` over the selected range, with funding shown separately.
 
 ---
 
 ## 10. Code layout (as built in v1; see §16)
 
 - `crates/hl` (`tr-hl`): `signing` (§3.4), `actions` (order, cancel, cancelByCloid, modify, batchModify, updateLeverage, scheduleCancel, noop, approveAgent, approveBuilderFee, structs with explicit field order), `assets` (the registry, §5.1), `rounding` (§5.2), `client` (`/info` and `/exchange` over `reqwest`, which already compiles for wasm in this workspace [repo]), `stream` (user websocket), `nonce`. No `tokio` "full"; it follows `tr-broker`'s wasm split [repo].
-- `tr-broker`: `secrets` gains a second store for agent keys (Keychain service `terminal.hyperliquid`). The existing SnapTrade item is untouched.
+- `tr-broker`: `secrets` gains a second store for agent keys (Keychain service `terminal.hyperliquid`). The existing Moomoo OpenD item is untouched.
 - `tr-broker` `model`: `Position.market: Option<String>` (serde default) and the `market_key()` precedence change from §9. `app/src/app/portfolio_view.rs`: the HL row actions. `app/src/app/broker.rs`: a network-aware `live_price` with a separate testnet quote map, and `broker_periodic` requesting gateway quotes only for mainnet keys (§9).
 - `app`: `TradingPrefs.hl: HlPrefs { enabled, network, max_order_value, max_leverage, daily_notional_cap, slippage_bps, dead_mans_switch, agent: Option<AgentMeta> }`. `AgentMeta` holds the public address, name, expiry and network, never the key. New `TradeRequest::Hl(HlRequest)` and `TradeResponse::Hl(..)` variants in the worker. The ticket gets an HL variant, and Settings › Trading gets a Hyperliquid section.
 - `tr-proto` / `tr-gateway`: **no change.** Market data keeps flowing as today. User data and orders never touch the server.
@@ -499,7 +499,7 @@ Unrealized PnL is then repriced from the gateway's live marks on mainnet, or tes
 7. The dead man's switch is opt-in, off by default.
 8. One confirmation for every order, modify, cancel-all and leverage change, plus the kill switch (`KILL` and a button in `ORD`).
 9. No builder fee: the `builder` field is never sent.
-10. Hyperliquid sits inside LIVE next to the SnapTrade accounts, with an amber TESTNET badge on the account, the ticket, the confirmation and the toolbar.
+10. Hyperliquid sits inside LIVE next to the Moomoo OpenD accounts, with an amber TESTNET badge on the account, the ticket, the confirmation and the toolbar.
 11. Asset ids come from the API per network (`perpDexs` and `meta` per dex), never hard-coded.
 12. A separate testnet quote map: testnet rows and tickets never read the gateway's mainnet quotes, and the reverse.
 
@@ -517,7 +517,7 @@ The questions as first asked:
 10. **Builder fees:** monetise with a builder code (e.g. 1–5 bp on perps, opt-in, always shown in the confirm), or keep Terminal fee-free? This depends on Q1, since fees may change the regulatory picture.
 11. **Scope of "stocks":** HIP-3 perps on `xyz` only for v1, or also `para`/`io`/`mkts` (which testnet doesn't have, so they'd launch untested end to end)?
 12. **Spot:** include HL spot (e.g. `HYPE/USDC`) in v1, or perps only?
-13. **One account mode or two?** Should the toolbar badge become `DEMO` / `LIVE` / `HL` (three modes), or should HL accounts sit inside `LIVE` next to SnapTrade accounts, with the network badge on each?
+13. **One account mode or two?** Should the toolbar badge become `DEMO` / `LIVE` / `HL` (three modes), or should HL accounts sit inside `LIVE` next to Moomoo OpenD accounts, with the network badge on each?
 
 ---
 

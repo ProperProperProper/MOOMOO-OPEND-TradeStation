@@ -268,7 +268,7 @@ impl TerminalApp {
                 ],
             );
 
-            section(ui, "Brokerage (SnapTrade)");
+            section(ui, "Brokerage (Moomoo OpenD)");
             command_table(
                 ui,
                 "help-broker",

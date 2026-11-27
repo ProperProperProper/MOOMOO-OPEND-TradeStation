@@ -83,7 +83,7 @@
 		},
 		{
 			title: 'Your brokerage',
-			body: 'Connect your brokers through SnapTrade to see balances, positions, orders and activity, repriced at live quotes. Keys stay in your Mac’s Keychain.',
+			body: 'Connect your brokerage through Moomoo OpenD to see balances, positions, orders and activity, repriced at live quotes. Keys stay in your Mac’s Keychain.',
 			Visual: PortfolioCard
 		},
 		{

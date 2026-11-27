@@ -1,10 +1,10 @@
-//! Order entry through SnapTrade: order tickets, validation, the order-impact preview, placing
+//! Order entry through Moomoo OpenD: order tickets, validation, the order-impact preview, placing
 //! a previewed order and cancelling open orders, plus an offline simulator for the sample
 //! portfolio.
 //!
-//! Placing an order always goes through [`SnapTrade::order_impact`] first: SnapTrade returns a
+//! Placing an order always goes through [`MoomooClient::order_impact`] first: the gateway returns a
 //! `Trade` id (valid five minutes) together with the estimated commission and remaining cash,
-//! and only that previewed trade can be placed ([`SnapTrade::place_previewed`]). There is no
+//! and only that previewed trade can be placed ([`MoomooClient::place_previewed`]). There is no
 //! call that places an order without a preview. Nothing in this crate decides to trade: the
 //! terminal gates every call behind an explicit setting and a confirmation dialog.
 
@@ -15,11 +15,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::model::{self, InstrumentKind, Order, Portfolio, num};
-use crate::snaptrade::SnapTrade;
+use crate::moomoo::MoomooClient;
 
-/// How long SnapTrade keeps a previewed trade before rejecting it.
+/// How long the gateway keeps a previewed trade before rejecting it.
 pub const PREVIEW_TTL_SECS: i64 = 5 * 60;
-/// Treat a preview as stale a little before SnapTrade does, so a confirm that takes a few
+/// Treat a preview as stale a little before the gateway does, so a confirm that takes a few
 /// seconds to reach the server is not rejected.
 pub const PREVIEW_MARGIN_SECS: i64 = 20;
 
@@ -150,7 +150,7 @@ fn positive(x: f64) -> bool {
     x.is_finite() && x > 0.0
 }
 
-/// Ids SnapTrade issues are UUIDs or broker order numbers; anything else is refused before
+/// Ids issued are UUIDs or broker order numbers; anything else is refused before
 /// it reaches a URL path.
 pub fn valid_id(id: &str) -> bool {
     !id.is_empty()
@@ -159,7 +159,7 @@ pub fn valid_id(id: &str) -> bool {
         && !id.contains("..")
 }
 
-/// Upper-cased ticker if it looks like one SnapTrade understands.
+/// Upper-cased ticker if it looks like one the broker understands.
 pub fn clean_symbol(s: &str) -> Option<String> {
     let s = s.trim().to_ascii_uppercase();
     (!s.is_empty() && s.len() <= 21 && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '/')))
@@ -266,7 +266,7 @@ pub fn fmt_units(u: f64) -> String {
     if u.fract() == 0.0 { format!("{}", u as i64) } else { format!("{u}") }
 }
 
-/// A SnapTrade universal symbol the account's broker can trade.
+/// A universal symbol the account's broker can trade.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SymbolMatch {
     pub id: String,
@@ -306,16 +306,16 @@ pub fn pick_symbol(results: &[SymbolMatch], ticker: &str) -> Option<SymbolMatch>
     results.iter().find(|s| s.symbol.eq_ignore_ascii_case(&want) || s.symbol.eq_ignore_ascii_case(&alt)).cloned()
 }
 
-/// SnapTrade's estimate of an order, before it is placed.
+/// The broker's estimate of an order, before it is placed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OrderPreview {
     /// Trade id to place within [`PREVIEW_TTL_SECS`].
     pub trade_id: String,
     pub request: OrderRequest,
     pub symbol: SymbolMatch,
-    /// Price SnapTrade or the broker quoted for the trade, if any.
+    /// Price the broker quoted for the trade, if any.
     pub price: Option<f64>,
-    /// Units SnapTrade will send (it fills these in for notional orders on some brokers).
+    /// Units the broker will send (fills these in for notional orders on some brokers).
     pub units: Option<f64>,
     pub commission: Option<f64>,
     pub forex_fees: Option<f64>,
@@ -365,7 +365,7 @@ pub fn parse_impact(req: &OrderRequest, symbol: SymbolMatch, v: &Value, now: Dat
     let trade = &v["trade"];
     let trade_id = text(&trade["id"]);
     if !valid_id(&trade_id) {
-        bail!("SnapTrade did not return a trade id for the preview");
+        bail!("Broker did not return a trade id for the preview");
     }
     let impact = v["trade_impacts"].as_array().and_then(|a| a.first()).cloned().unwrap_or(Value::Null);
     let currency = Some(text(&v["combined_remaining_balance"]["currency"]["code"]))
@@ -396,7 +396,7 @@ pub fn parse_placed(account_id: &str, v: &Value) -> Option<Order> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Capability {
     pub brokerage: String,
-    /// The brokerage supports trading through SnapTrade at all.
+    /// The brokerage supports trading at all.
     pub broker_trading: bool,
     /// The connection was made with trading access (`type: trade`).
     pub connection_trading: bool,
@@ -413,7 +413,7 @@ impl Capability {
     /// Why orders cannot be sent, for the ticket.
     pub fn blocker(&self) -> Option<String> {
         if !self.broker_trading {
-            Some(format!("{} does not support trading through SnapTrade (read-only).", self.brokerage))
+            Some(format!("{} does not support trading (read-only).", self.brokerage))
         } else if self.disabled {
             Some(format!("The {} connection is disabled; reconnect it in Settings › Brokerage.", self.brokerage))
         } else if !self.connection_trading {
@@ -427,7 +427,7 @@ impl Capability {
     }
 }
 
-/// Capabilities per brokerage connection (SnapTrade authorization id) from `/authorizations`,
+/// Capabilities per brokerage connection (authorization id) from `/authorizations`,
 /// where each connection carries its brokerage and access type. Accounts map onto these
 /// through [`crate::Account::connection_id`], so one request covers every account.
 pub fn parse_connection_capabilities(authorizations: &Value) -> std::collections::HashMap<String, Capability> {
@@ -477,7 +477,7 @@ pub fn parse_capabilities(accounts: &Value, authorizations: &Value) -> std::coll
 pub enum PlaceError {
     /// Refused before anything was sent.
     NotSent(String),
-    /// SnapTrade or the broker rejected the order (4xx): nothing was placed.
+    /// The broker rejected the order (4xx): nothing was placed.
     Rejected(String),
     /// The request may have reached the broker but no clear answer came back: the order may
     /// exist. Check open orders before placing again.
@@ -505,10 +505,10 @@ impl std::fmt::Display for PlaceError {
 /// Only a client error (4xx) is a definite "not placed"; everything else after sending is unknown.
 pub fn classify_place_error(e: anyhow::Error) -> PlaceError {
     let msg = format!("{e:#}");
-    if e.downcast_ref::<crate::snaptrade::NotSent>().is_some() {
+    if e.downcast_ref::<crate::moomoo::NotSent>().is_some() {
         return PlaceError::NotSent(msg);
     }
-    match e.downcast_ref::<crate::snaptrade::ApiError>() {
+    match e.downcast_ref::<crate::moomoo::ApiError>() {
         Some(api) if (400..500).contains(&api.status) => PlaceError::Rejected(msg),
         _ => PlaceError::Unknown(msg),
     }
@@ -519,7 +519,7 @@ fn segment<'a>(what: &str, id: &'a str) -> Result<&'a str> {
     if valid_id(id) { Ok(id) } else { Err(anyhow!("invalid {what}")) }
 }
 
-impl SnapTrade {
+impl MoomooClient {
     /// Look up `ticker` among the symbols the account's broker supports.
     pub async fn find_symbol(&self, account_id: &str, ticker: &str) -> Result<SymbolMatch> {
         let acct = segment("account id", account_id)?;
@@ -537,7 +537,7 @@ impl SnapTrade {
         })
     }
 
-    /// Ask SnapTrade (and through it the broker) to check an order and estimate its impact.
+    /// Ask the broker to check an order and estimate its impact.
     /// Nothing is placed.
     pub async fn order_impact(&self, req: &OrderRequest) -> Result<OrderPreview> {
         req.validate().map_err(|e| anyhow!(e))?;
@@ -595,11 +595,11 @@ impl SnapTrade {
     /// (read-only otherwise), for connections that were made read-only.
     pub async fn trading_portal_url(&self, dark: bool) -> Result<String> {
         let body = json!({ "connectionType": "trade-if-available", "darkMode": dark });
-        let v = self.call(Method::POST, "/snapTrade/login", &[], Some(body), true).await?;
+        let v = self.call(Method::POST, "/broker/login", &[], Some(body), true).await?;
         if v.get("encryptedSharedKey").is_some() {
-            bail!("SnapTrade returned an encrypted login response; disable response encryption for this key");
+            bail!("Moomoo OpenD returned an encrypted login response; disable response encryption for this key");
         }
-        v["redirectURI"].as_str().map(str::to_string).context("SnapTrade did not return a Connection Portal URL")
+        v["redirectURI"].as_str().map(str::to_string).context("Moomoo OpenD did not return a Connection Portal URL")
     }
 }
 

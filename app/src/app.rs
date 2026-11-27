@@ -83,7 +83,7 @@ pub enum PaneKind {
     News(Box<NewsPane>),
     OrderBook(Box<BookPane>),
     Options(Box<OptionsPane>),
-    /// Brokerage accounts through SnapTrade (`PORT`, `ACCT`, `POS`, `ORD`, `ACTV`).
+    /// Brokerage accounts through Moomoo OpenD (`PORT`, `ACCT`, `POS`, `ORD`, `ACTV`).
     Portfolio(Box<broker::PortfolioPane>),
     Settings,
 }
@@ -552,7 +552,7 @@ pub struct TerminalApp {
     /// Measured macOS title bar geometry (polled; changes with full screen).
     chrome: Option<tr_macos::Chrome>,
     last_chrome_poll: Option<Instant>,
-    /// Brokerage integration (SnapTrade credentials and the loaded portfolio).
+    /// Brokerage integration (Moomoo credentials and the loaded portfolio).
     broker: broker::BrokerState,
     /// Order ticket and trading dialogs.
     trading: trading::TradingState,

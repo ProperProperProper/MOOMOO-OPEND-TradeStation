@@ -87,7 +87,7 @@ fn refuses_what_a_cash_account_cannot_do() {
     assert!(e.contains("up to 2 TSLA"), "{e}");
     let e = b.submit(&order(Side::Buy, "MSFT", 1.0), None, t0()).unwrap_err();
     assert!(e.contains("Waiting for a price"), "market orders need a quote: {e}");
-    let other = OrderRequest { account_id: "snaptrade-uuid".into(), ..order(Side::Buy, "MSFT", 1.0) };
+    let other = OrderRequest { account_id: "other-broker-uuid".into(), ..order(Side::Buy, "MSFT", 1.0) };
     assert!(b.submit(&other, Some(400.0), t0()).is_err(), "only the demo account");
     assert!(b.orders.iter().all(|o| o.status == "EXECUTED"), "refused orders leave no trace");
 }

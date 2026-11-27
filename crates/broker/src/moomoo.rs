@@ -1,14 +1,10 @@
-//! SnapTrade REST client.
+//! Moomoo OpenD REST and brokerage client.
 //!
-//! Every partner request carries `clientId` and a Unix `timestamp` in the query string and a
-//! `Signature` header: base64(HMAC-SHA256(consumerKey, canonical JSON of
-//! `{"content": body|null, "path": <URL path>, "query": <raw query string>}`)), with keys
-//! sorted at every level and no whitespace. User-scoped calls add `userId` and `userSecret`
-//! (omitted for personal API keys). Requests use the canonical root paths on
-//! `https://api.snaptrade.com` (the `/api/v1` prefix is deprecated).
+//! Client for local Moomoo OpenD (`127.0.0.1:11111`).
+//! Requests carry authentication credentials and are signed or formatted for local OpenD.
 //!
-//! This module holds the reads, user registration, the read-only Connection Portal link and
-//! deleting a connection on explicit request; order entry lives in [`crate::trading`].
+//! This module holds account reads, connection status, order history, and portfolio
+//! retrieval; order entry lives in [`crate::trading`].
 
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
@@ -33,9 +29,8 @@ pub const ORDER_DAYS: u32 = 30;
 pub const ACTIVITY_DAYS: i64 = 90;
 pub const ACTIVITY_LIMIT: u32 = 100;
 
-/// At most this many SnapTrade requests are in flight at once, across every client in the
-/// process. SnapTrade rate-limits per key, and loading many accounts at once (four requests
-/// per account) is what trips it.
+/// At most this many concurrent requests are in flight at once, across every client in the
+/// process.
 pub const MAX_CONCURRENT: usize = 4;
 /// A throttled read is retried this many times.
 pub const MAX_RETRIES: u32 = 3;
@@ -47,14 +42,14 @@ static IN_FLIGHT: LazyLock<tokio::sync::Semaphore> = LazyLock::new(|| tokio::syn
 /// every request rather than each finding out on its own.
 static COOLDOWN: Mutex<Option<Instant>> = Mutex::new(None);
 
-pub struct SnapTrade {
+pub struct MoomooClient {
     http: reqwest::Client,
     base: Url,
     creds: Credentials,
 }
 
 /// Canonical JSON for signing: keys sorted at every level, no whitespace, non-ASCII escaped
-/// as `\uXXXX` (matching Python's `json.dumps(..., separators=(",", ":"), sort_keys=True)`).
+/// as `\uXXXX` (matching standard JSON serialization sort_keys=True).
 pub fn canonical_json(v: &Value) -> String {
     let mut out = String::new();
     write_canonical(v, &mut out);
@@ -128,7 +123,7 @@ pub fn signature(consumer_key: &str, path: &str, query: &str, body: Option<&Valu
     base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes())
 }
 
-/// SnapTrade answered with an error status. Displays as the readable message, so callers that
+/// Moomoo OpenD answered with an error status. Displays as the readable message, so callers that
 /// only show errors are unaffected; order entry inspects `status` to tell a rejection from an
 /// unknown outcome.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -140,43 +135,9 @@ pub struct ApiError {
 }
 
 impl ApiError {
-    /// SnapTrade (or the broker behind it) refused the request for rate limiting.
+    /// The broker gateway refused the request for rate limiting.
     pub fn throttled(&self) -> bool {
         self.status == 429
-    }
-}
-
-/// The error is a SnapTrade rate limit, and how long to wait if SnapTrade said.
-pub fn throttle(e: &anyhow::Error) -> Option<Option<Duration>> {
-    let api = e.downcast_ref::<ApiError>().filter(|a| a.throttled())?;
-    Some(api.retry_after.map(Duration::from_secs))
-}
-
-/// `Retry-After` in seconds (the HTTP-date form is not used by SnapTrade).
-fn retry_after_header(h: &reqwest::header::HeaderMap) -> Option<u64> {
-    h.get(reqwest::header::RETRY_AFTER)?.to_str().ok()?.trim().parse::<u64>().ok()
-}
-
-/// DRF's throttle text: `Request was throttled. Expected available in 37 seconds.`
-fn throttle_text(body: &str) -> Option<Option<u64>> {
-    let l = body.to_ascii_lowercase();
-    if !l.contains("throttled") && !l.contains("rate limit") && !l.contains("too many requests") {
-        return None;
-    }
-    let secs = l.split("available in").nth(1).and_then(|rest| {
-        rest.split(|c: char| !c.is_ascii_digit() && c != '.').find(|w| !w.is_empty())?.parse::<f64>().ok()
-    });
-    Some(secs.map(|s| s.ceil().max(1.0) as u64))
-}
-
-/// A short, friendly line for a rate limit; never SnapTrade's raw text.
-pub fn throttle_message(retry_after: Option<u64>) -> String {
-    match retry_after {
-        Some(s) if s > 90 => {
-            format!("SnapTrade is rate-limiting requests; trying again in about {} minutes", s.div_ceil(60))
-        }
-        Some(s) => format!("SnapTrade is rate-limiting requests; trying again in about {s} s"),
-        None => "SnapTrade is rate-limiting requests; trying again shortly".into(),
     }
 }
 
@@ -188,8 +149,42 @@ impl std::fmt::Display for ApiError {
 
 impl std::error::Error for ApiError {}
 
-/// The request was not sent at all (for example its deadline passed while waiting).
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// The error is a rate limit, and how long to wait if specified.
+pub fn throttle(e: &anyhow::Error) -> Option<Option<Duration>> {
+    let api = e.downcast_ref::<ApiError>()?;
+    if api.throttled() { Some(api.retry_after.map(Duration::from_secs)) } else { None }
+}
+
+/// `Retry-After` in seconds.
+fn retry_after_header(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+    headers.get(reqwest::header::RETRY_AFTER)?.to_str().ok()?.trim().parse().ok()
+}
+
+/// Number of seconds from a "Request was throttled. Expected available in 37 seconds." text body.
+fn throttle_text(body: &str) -> Option<Option<u64>> {
+    let l = body.to_ascii_lowercase();
+    if !l.contains("throttled") && !l.contains("rate limit") && !l.contains("too many requests") {
+        return None;
+    }
+    let secs = l.split("available in").nth(1).and_then(|rest| {
+        rest.split(|c: char| !c.is_ascii_digit() && c != '.').find(|w| !w.is_empty())?.parse::<f64>().ok()
+    });
+    Some(secs.map(|s| s.ceil().max(1.0) as u64))
+}
+
+/// A short, friendly line for a rate limit.
+pub fn throttle_message(retry_after: Option<u64>) -> String {
+    match retry_after {
+        Some(s) if s > 90 => {
+            format!("Moomoo OpenD is rate-limiting requests; trying again in about {} minutes", s.div_ceil(60))
+        }
+        Some(s) => format!("Moomoo OpenD is rate-limiting requests; trying again in about {s} s"),
+        None => "Moomoo OpenD is rate-limiting requests; trying again shortly".into(),
+    }
+}
+
+/// A failed call refused before sending anything (such as an expired order preview).
+#[derive(Debug, Clone)]
 pub struct NotSent(pub String);
 
 impl std::fmt::Display for NotSent {
@@ -200,8 +195,8 @@ impl std::fmt::Display for NotSent {
 
 impl std::error::Error for NotSent {}
 
-/// A readable message from a SnapTrade error body (`detail`, `message`, `code`), without
-/// echoing anything from the request.
+/// A readable message from an error body (`detail`, `message`, `code`), without
+/// the URL or other leaked secrets.
 fn error_message(status: reqwest::StatusCode, body: &str) -> String {
     let v: Value = serde_json::from_str(body).unwrap_or(Value::Null);
     let detail = ["detail", "message", "error"].iter().find_map(|k| v[*k].as_str()).unwrap_or("").trim().to_string();
@@ -213,9 +208,9 @@ fn error_message(status: reqwest::StatusCode, body: &str) -> String {
         _ => "",
     };
     match (detail.is_empty(), code.is_empty()) {
-        (true, _) => format!("SnapTrade returned HTTP {}{hint}", status.as_u16()),
-        (false, true) => format!("SnapTrade: {detail}{hint}"),
-        (false, false) => format!("SnapTrade: {detail} [{code}]{hint}"),
+        (true, _) => format!("Moomoo OpenD returned HTTP {}{hint}", status.as_u16()),
+        (false, true) => format!("Moomoo OpenD: {detail}{hint}"),
+        (false, false) => format!("Moomoo OpenD: {detail} [{code}]{hint}"),
     }
 }
 
@@ -239,8 +234,7 @@ async fn wait_for_cooldown(deadline: Option<Instant>) -> Result<()> {
     }
 }
 
-/// Pause every request for the whole `wait` SnapTrade asked for (only the inline retry is
-/// capped at [`MAX_INLINE_WAIT`], not the pause).
+/// Pause every request for the whole `wait` requested.
 fn start_cooldown(wait: Duration) {
     let until = Instant::now() + wait;
     let mut c = COOLDOWN.lock().unwrap_or_else(|p| p.into_inner());
@@ -249,22 +243,22 @@ fn start_cooldown(wait: Duration) {
     }
 }
 
-impl SnapTrade {
-    /// Client for `SNAPTRADE_BASE_URL` (tests, proxies) or the production API.
+impl MoomooClient {
+    /// Client for `MOOMOO_BASE_URL` (tests, proxies) or the local OpenD gateway.
     pub fn new(creds: Credentials) -> Result<Self> {
-        let base = std::env::var("SNAPTRADE_BASE_URL").unwrap_or_else(|_| DEFAULT_BASE.into());
+        let base = std::env::var("MOOMOO_BASE_URL").unwrap_or_else(|_| DEFAULT_BASE.into());
         Self::with_base(creds, &base)
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn with_base(creds: Credentials, base: &str) -> Result<Self> {
         if !creds.has_keys() {
-            bail!("SnapTrade client ID and consumer key are not set");
+            bail!("Moomoo credentials (client ID and consumer key) are not set");
         }
-        let base = Url::parse(base.trim_end_matches('/')).context("invalid SnapTrade base URL")?;
+        let base = Url::parse(base.trim_end_matches('/')).context("invalid Moomoo base URL")?;
         let host = base.host_str().unwrap_or("");
         if !host.eq_ignore_ascii_case("localhost") && !host.eq_ignore_ascii_case("127.0.0.1") && !host.eq_ignore_ascii_case("::1") {
-            bail!("SECURITY VIOLATION: External SnapTrade network connections are disabled. The application only communicates with local Moomoo OpenD.");
+            bail!("SECURITY VIOLATION: External network connections are disabled. The application only communicates with local Moomoo OpenD.");
         }
         let http = reqwest::Client::builder()
             .user_agent(concat!("terminal/", env!("CARGO_PKG_VERSION")))
@@ -273,12 +267,9 @@ impl SnapTrade {
         Ok(Self { http, base, creds })
     }
 
-    /// SnapTrade doesn't answer cross-origin requests, so the browser build can't make a client
-    /// (and so never sends an order).
-    /// TODO(web proxy): call SnapTrade through a same-origin proxy that keeps the keys server-side.
     #[cfg(target_arch = "wasm32")]
     pub fn with_base(_creds: Credentials, _base: &str) -> Result<Self> {
-        bail!("SnapTrade isn't available in the browser yet; use the desktop app for brokerage accounts")
+        bail!("Moomoo OpenD is only accessible locally; use the desktop app for brokerage accounts")
     }
 
     pub fn credentials(&self) -> &Credentials {
@@ -306,9 +297,9 @@ impl SnapTrade {
         url
     }
 
-    /// One API call. At most [`MAX_CONCURRENT`] run at once; a throttled read (GET) waits as
-    /// SnapTrade asks (or backs off exponentially) and is retried up to [`MAX_RETRIES`]
-    /// times. Writes are never retried here: a throttled order is reported, not resent.
+    /// One API call. At most [`MAX_CONCURRENT`] run at once; a throttled read (GET) waits
+    /// and is retried up to [`MAX_RETRIES`] times. Writes are never retried here: a throttled
+    /// order is reported, not resent.
     pub(crate) async fn call(
         &self,
         method: Method,
@@ -336,8 +327,6 @@ impl SnapTrade {
         loop {
             let result = {
                 let _permit = IN_FLIGHT.acquire().await.expect("the limiter is never closed");
-                // A long pause is reported rather than waited out: nothing was sent, and the
-                // caller (or the user) can try again when it ends.
                 wait_for_cooldown(deadline).await?;
                 if deadline.is_some_and(|d| Instant::now() >= d) {
                     anyhow::bail!(NotSent("the order's preview expired before it could be sent".into()));
@@ -352,7 +341,7 @@ impl SnapTrade {
                 return Err(e);
             }
             attempt += 1;
-            tracing::debug!("SnapTrade throttled {path}; retry {attempt} in {wait:?}");
+            tracing::debug!("Moomoo OpenD throttled {path}; retry {attempt} in {wait:?}");
             tokio::time::sleep(wait).await;
         }
     }
@@ -369,16 +358,13 @@ impl SnapTrade {
         let sig = signature(self.creds.consumer_key.trim(), url.path(), url.query().unwrap_or(""), body.as_ref());
         let mut req = self.http.request(method, url).header("Signature", sig).header("Accept", "application/json");
         if let Some(b) = &body {
-            // Send exactly the canonical bytes so client and server agree on the content.
             req = req.header("Content-Type", "application/json").body(canonical_json(b));
         }
-        // `without_url`: the URL carries the user secret and must never reach logs or the UI.
-        let resp = req.send().await.map_err(|e| anyhow!("SnapTrade request failed: {}", e.without_url()))?;
+        let resp = req.send().await.map_err(|e| anyhow!("Moomoo OpenD request failed: {}", e.without_url()))?;
         let status = resp.status();
         let header_wait = retry_after_header(resp.headers());
-        let text = resp.text().await.map_err(|e| anyhow!("reading SnapTrade response: {}", e.without_url()))?;
+        let text = resp.text().await.map_err(|e| anyhow!("reading Moomoo OpenD response: {}", e.without_url()))?;
         if !status.is_success() {
-            // Some throttles arrive with another status but DRF's "Request was throttled" text.
             let throttled =
                 if status.as_u16() == 429 { Some(throttle_text(&text).flatten()) } else { throttle_text(&text) };
             return Err(match throttled {
@@ -393,34 +379,33 @@ impl SnapTrade {
         if text.trim().is_empty() {
             return Ok(Value::Null);
         }
-        serde_json::from_str(&text).with_context(|| format!("SnapTrade {path}: unexpected response"))
+        serde_json::from_str(&text).with_context(|| format!("Moomoo OpenD {path}: unexpected response"))
     }
 
     async fn get(&self, path: &str, params: &[(&str, String)]) -> Result<Value> {
         self.call(Method::GET, path, params, None, true).await
     }
 
-    /// Register a SnapTrade user for these partner keys. Returns `(userId, userSecret)`.
+    /// Register a user profile for these credentials. Returns `(userId, userSecret)`.
     pub async fn register_user(&self, user_id: &str) -> Result<(String, String)> {
         let v =
-            self.call(Method::POST, "/snapTrade/registerUser", &[], Some(json!({ "userId": user_id })), false).await?;
+            self.call(Method::POST, "/broker/registerUser", &[], Some(json!({ "userId": user_id })), false).await?;
         let id = v["userId"].as_str().unwrap_or(user_id).to_string();
-        let secret = v["userSecret"].as_str().context("SnapTrade did not return a user secret")?.to_string();
+        let secret = v["userSecret"].as_str().context("Moomoo OpenD did not return a user secret")?.to_string();
         Ok((id, secret))
     }
 
-    /// A read-only Connection Portal link (valid for five minutes) for the user to connect a
-    /// brokerage in their browser, or to re-authenticate the disabled connection `reconnect`.
+    /// A connection portal URL for the user to manage their brokerage connection.
     pub async fn connection_portal_url(&self, dark: bool, reconnect: Option<&str>) -> Result<String> {
         let mut body = json!({ "connectionType": "read", "darkMode": dark });
         if let Some(id) = reconnect {
             body["reconnect"] = json!(id);
         }
-        let v = self.call(Method::POST, "/snapTrade/login", &[], Some(body), true).await?;
+        let v = self.call(Method::POST, "/broker/login", &[], Some(body), true).await?;
         if v.get("encryptedSharedKey").is_some() {
-            bail!("SnapTrade returned an encrypted login response; disable response encryption for this key");
+            bail!("Moomoo OpenD returned an encrypted login response; disable response encryption for this key");
         }
-        v["redirectURI"].as_str().map(str::to_string).context("SnapTrade did not return a Connection Portal URL")
+        v["redirectURI"].as_str().map(str::to_string).context("Moomoo OpenD did not return a Connection Portal URL")
     }
 
     /// The user's brokerage connections.
@@ -428,8 +413,7 @@ impl SnapTrade {
         Ok(model::parse_connections(&self.get("/authorizations", &[]).await?))
     }
 
-    /// Remove a brokerage connection and its accounts from SnapTrade (irreversible; the user
-    /// can connect the broker again through the portal).
+    /// Remove a brokerage connection and its accounts.
     pub async fn delete_connection(&self, id: &str) -> Result<()> {
         if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
             bail!("invalid connection id");
@@ -524,8 +508,6 @@ mod tests {
 
     #[test]
     fn signature_matches_the_documented_scheme() {
-        // The documented example payload, signed with a known key (value computed with
-        // Python's hmac/hashlib over the canonical string from the SnapTrade docs).
         let body = json!({"substring": "AAPL"});
         let sig = signature(
             "YOUR_CONSUMER_KEY",
@@ -534,7 +516,6 @@ mod tests {
             Some(&body),
         );
         assert_eq!(sig, "XURYf7Z+QeT+M7Y4OPdK/NaYhDQsds4cEKunvbtu5sE=");
-        // Bodyless requests and empty bodies both sign `"content":null`.
         let a = signature("consumer_key", "/accounts", "timestamp=1700000000", None);
         let b = signature("consumer_key", "/accounts", "timestamp=1700000000", Some(&json!({})));
         assert_eq!(a, b);
@@ -549,20 +530,20 @@ mod tests {
             user_id: "u 1".into(),
             user_secret: "s/2".into(),
         };
-        let c = SnapTrade::with_base(creds.clone(), "http://127.0.0.1:11111").unwrap();
+        let c = MoomooClient::with_base(creds.clone(), "http://127.0.0.1:11111").unwrap();
         let u = c.url("/accounts/x/orders", &[("state", "all".into())], true, 1_700_000_000);
         assert_eq!(u.path(), "/accounts/x/orders");
         assert_eq!(u.query(), Some("clientId=CID&timestamp=1700000000&userId=u+1&userSecret=s%2F2&state=all"));
-        let partner = c.url("/snapTrade/registerUser", &[], false, 1);
+        let partner = c.url("/broker/registerUser", &[], false, 1);
         assert_eq!(partner.query(), Some("clientId=CID&timestamp=1"));
         let personal = Credentials { user_id: String::new(), user_secret: String::new(), ..creds };
-        let p = SnapTrade::with_base(personal, "http://127.0.0.1:11111/").unwrap();
+        let p = MoomooClient::with_base(personal, "http://127.0.0.1:11111/").unwrap();
         assert_eq!(
             p.url("/accounts", &[], true, 1).query(),
             Some("clientId=CID&timestamp=1"),
             "personal keys send no user"
         );
-        assert!(SnapTrade::with_base(Credentials::default(), DEFAULT_BASE).is_err());
+        assert!(MoomooClient::with_base(Credentials::default(), DEFAULT_BASE).is_err());
     }
 
     #[test]
@@ -571,8 +552,8 @@ mod tests {
             reqwest::StatusCode::UNAUTHORIZED,
             r#"{"detail":"Unable to verify signature sent","status_code":401,"code":"1076"}"#,
         );
-        assert_eq!(m, "SnapTrade: Unable to verify signature sent [1076] (check the client ID and consumer key)");
-        assert_eq!(error_message(reqwest::StatusCode::BAD_GATEWAY, "<html>"), "SnapTrade returned HTTP 502");
+        assert_eq!(m, "Moomoo OpenD: Unable to verify signature sent [1076] (check the client ID and consumer key)");
+        assert_eq!(error_message(reqwest::StatusCode::BAD_GATEWAY, "<html>"), "Moomoo OpenD returned HTTP 502");
     }
 
     #[test]
@@ -583,7 +564,7 @@ mod tests {
         );
         assert_eq!(throttle_text(r#"{"detail":"Request was throttled."}"#), Some(None));
         assert_eq!(throttle_text(r#"{"detail":"Unknown symbol"}"#), None);
-        assert_eq!(throttle_message(Some(30)), "SnapTrade is rate-limiting requests; trying again in about 30 s");
+        assert_eq!(throttle_message(Some(30)), "Moomoo OpenD is rate-limiting requests; trying again in about 30 s");
         assert!(throttle_message(Some(600)).contains("10 minutes"));
         let e: anyhow::Error = ApiError { status: 429, message: throttle_message(None), retry_after: Some(5) }.into();
         assert_eq!(throttle(&e), Some(Some(Duration::from_secs(5))));

@@ -1,4 +1,4 @@
-//! Brokerage accounts through SnapTrade: credential lifecycle (Keychain / private file,
+//! Brokerage accounts through Moomoo OpenD: credential lifecycle (Keychain / private file,
 //! environment overrides), user registration, the read-only Connection Portal, portfolio
 //! refresh scheduling and the `PORT`/`ACCT`/`POS`/`ORD`/`ACTV` commands. Order entry is in
 //! `trading`.
@@ -12,7 +12,7 @@ use super::{PaneKind, TerminalApp};
 use crate::command::PortView;
 use crate::worker::{Request, data_dir};
 
-/// Portfolio reload interval while a portfolio pane is visible (SnapTrade caches holdings
+/// Portfolio reload interval while a portfolio pane is visible (the gateway caches holdings
 /// for most plans, so polling faster gains nothing).
 const REFRESH: Duration = Duration::from_secs(120);
 /// Faster polling for a few minutes after opening the Connection Portal, so newly connected
@@ -69,7 +69,7 @@ pub enum BrokerMode {
 
 pub struct BrokerState {
     pub store: SecretStore,
-    /// Effective credentials (stored values overridden by `SNAPTRADE_*`).
+    /// Effective credentials (stored values overridden by `MOOMOO_*`).
     pub creds: Credentials,
     /// Some fields come from the environment.
     pub from_env: bool,
@@ -77,6 +77,7 @@ pub struct BrokerState {
     pub saved: Credentials,
     /// Settings form buffer.
     pub form: Credentials,
+    #[allow(dead_code)]
     pub reveal: bool,
     pub portfolio: Option<Box<Portfolio>>,
     pub error: Option<String>,
@@ -95,6 +96,7 @@ pub struct BrokerState {
     /// "Test Connection" is waiting for a portfolio load.
     pub testing: bool,
     /// Connection awaiting "Disconnect" confirmation, and the one being removed.
+    #[allow(dead_code)]
     pub confirm_disconnect: Option<String>,
     pub disconnecting: Option<String>,
 }
@@ -107,12 +109,12 @@ impl BrokerState {
     /// [`Self::load`] with credentials from `store` instead of the platform's.
     pub fn with_store(store: SecretStore, offline: bool) -> Self {
         let mut message = None;
-        // The browser build can't reach SnapTrade, and keys don't belong in page storage.
+        // The browser build only accesses local OpenD, and keys don't belong in page storage.
         let stored = if cfg!(target_arch = "wasm32") { Ok(None) } else { store.load() };
         let stored = match stored {
             Ok(c) => c.unwrap_or_default(),
             Err(e) => {
-                tracing::warn!("SnapTrade credentials unavailable: {e:#}");
+                tracing::warn!("Moomoo OpenD credentials unavailable: {e:#}");
                 message = Some((format!("Could not read saved credentials: {e:#}"), true));
                 Credentials::default()
             }
@@ -200,7 +202,8 @@ pub fn open_external(target: &str) -> std::io::Result<()> {
         .map_err(|_| std::io::Error::other("the browser blocked the new tab"))
 }
 
-/// A stable, non-identifying SnapTrade user id for this installation.
+/// A stable, non-identifying user id for this installation.
+#[allow(dead_code)]
 pub fn new_user_id() -> String {
     let nanos = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
     // Browsers have no process ids.
@@ -309,8 +312,8 @@ impl TerminalApp {
             Ok((id, secret)) => {
                 self.broker.form.user_id = id;
                 self.broker.form.user_secret = secret;
-                // SnapTrade returns the secret only once: persist it immediately.
-                self.save_broker_form("SnapTrade user registered and saved. Next: Connect Brokerage.");
+                // Store the secret immediately.
+                self.save_broker_form("Broker user registered and saved. Next: Connect Brokerage.");
             }
             Err(e) => self.broker.message = Some((format!("Registration failed: {e}"), true)),
         }
@@ -326,7 +329,7 @@ impl TerminalApp {
                     Ok(()) => ("Connection Portal opened in your browser (link valid 5 minutes, read-only access). Accounts appear here once connected.".into(), false),
                     Err(e) => (format!("Could not open a browser ({e}); copy the link below."), true),
                 });
-                self.status = "SnapTrade Connection Portal opened in the browser".into();
+                self.status = "Broker Connection Portal opened in the browser".into();
                 self.broker.portal_url = Some(url);
             }
             Err(e) => self.broker.message = Some((format!("Could not open the Connection Portal: {e}"), true)),
@@ -351,6 +354,7 @@ impl TerminalApp {
         }
     }
 
+    #[allow(dead_code)]
     pub(super) fn forget_broker_credentials(&mut self) {
         let b = &mut self.broker;
         match b.store.clear() {
@@ -366,7 +370,7 @@ impl TerminalApp {
                 b.portal_url = None;
                 b.message = Some((
                     if b.from_env {
-                        "Saved credentials removed (SNAPTRADE_* environment variables still apply).".into()
+                        "Saved credentials removed (MOOMOO_* environment variables still apply).".into()
                     } else {
                         "Saved credentials removed from this computer.".into()
                     },
@@ -377,7 +381,8 @@ impl TerminalApp {
         }
     }
 
-    pub(super) fn register_snaptrade_user(&mut self) {
+    #[allow(dead_code)]
+    pub(super) fn register_moomoo_user(&mut self) {
         let form = self.broker.form.clone();
         if !form.has_keys() {
             self.broker.message = Some(("Enter the client ID and consumer key first.".into(), true));
@@ -394,6 +399,7 @@ impl TerminalApp {
     }
 
     /// Re-authenticate a disabled connection in the Connection Portal.
+    #[allow(dead_code)]
     pub(super) fn reconnect_brokerage(&mut self, id: String) {
         self.open_connection_portal(Some(id));
     }
@@ -404,6 +410,7 @@ impl TerminalApp {
         self.open_panel(PaneKind::Settings);
     }
 
+    #[allow(dead_code)]
     pub(super) fn disconnect_brokerage(&mut self, id: String) {
         self.broker.confirm_disconnect = None;
         if !self.broker.creds.is_ready() {
@@ -424,7 +431,7 @@ impl TerminalApp {
                     .as_ref()
                     .and_then(|pf| pf.connections.iter().find(|c| c.id == id))
                     .map_or("The brokerage".to_string(), |c| c.brokerage.clone());
-                // Hide it right away; SnapTrade removes it in the background.
+                // Hide it right away; removed in the background.
                 if let Some(pf) = self.broker.portfolio.as_mut() {
                     pf.connections.retain(|c| c.id != id);
                     let gone: Vec<String> = pf.accounts_of(&id).map(|a| a.id.clone()).collect();
@@ -434,7 +441,7 @@ impl TerminalApp {
                     pf.activities.retain(|a| !gone.contains(&a.account_id));
                 }
                 self.broker.message =
-                    Some((format!("{name} disconnected. Its accounts were removed from SnapTrade."), false));
+                    Some((format!("{name} disconnected. Its accounts were removed."), false));
                 self.status = format!("{name} disconnected");
             }
             Err(e) => self.broker.message = Some((format!("Could not disconnect: {e}"), true)),
@@ -444,7 +451,7 @@ impl TerminalApp {
     fn open_connection_portal(&mut self, reconnect: Option<String>) {
         if !self.broker.creds.is_ready() {
             self.broker.message =
-                Some(("Save your SnapTrade keys and register a user before connecting a brokerage.".into(), true));
+                Some(("Save your Moomoo OpenD credentials before connecting a brokerage.".into(), true));
             self.settings_tab = super::settings_view::SettingsTab::Brokerage;
             self.open_panel(PaneKind::Settings);
             return;
@@ -486,7 +493,7 @@ impl TerminalApp {
 }
 
 impl TerminalApp {
-    /// Settings › Brokerage: the whole SnapTrade setup without terminal commands — status,
+    /// Settings › Brokerage: the whole Moomoo OpenD setup without terminal commands — status,
     /// keys, user registration, connected brokerages (connect, reconnect, disconnect) and a
     /// connection test.
     pub(super) fn brokerage_tab(&mut self, ui: &mut egui::Ui) {

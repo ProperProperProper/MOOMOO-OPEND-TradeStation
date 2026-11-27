@@ -1,10 +1,10 @@
-//! Hyperliquid inside LIVE, **testnet only**: the account next to SnapTrade's in the
+//! Hyperliquid inside LIVE, **testnet only**: the account next to Moomoo OpenD's in the
 //! portfolio panes, the agent (API wallet) lifecycle, the ticket's Hyperliquid variant with
 //! one confirmation per action, the kill switch and the opt-in dead man's switch.
 //!
 //! Safety rails, in order:
 //! 1. Off until enabled in Settings › Trading › Hyperliquid, with its own acknowledgement
-//!    (SnapTrade's switch never turns it on, or the reverse).
+//!    (the broker's switch never turns it on, or the reverse).
 //! 2. Orders are signed only by a Terminal-generated agent key the built-in wallet approved;
 //!    the key lives in the macOS Keychain, the Linux Secret Service, or browser memory. The
 //!    wallet itself (Turnkey) signs only that approval (see `super::wallet`).
@@ -39,7 +39,7 @@ use crate::worker::Request;
 
 /// Account ids of Hyperliquid testnet accounts: `hl:testnet:0x…`.
 pub const ACCOUNT_PREFIX: &str = "hl:testnet:";
-/// `Account::connection_id` of Hyperliquid accounts (not a SnapTrade connection).
+/// `Account::connection_id` of Hyperliquid accounts (not a broker connection).
 pub const CONNECTION_ID: &str = "hyperliquid";
 /// How often the ticket re-reads leverage and the mid while it's open.
 const MARKET_EVERY: Duration = Duration::from_secs(10);
@@ -64,7 +64,7 @@ pub fn store_account(master: &str) -> String {
     format!("testnet:{}", master.trim().to_ascii_lowercase())
 }
 
-/// The ticket's Hyperliquid fields (the rest is shared with SnapTrade's ticket).
+/// The ticket's Hyperliquid fields (the rest is shared with the broker ticket).
 #[derive(Debug, Clone, PartialEq)]
 pub struct HlTicket {
     pub kind: HlKind,
@@ -778,7 +778,7 @@ impl TerminalApp {
     }
 
     /// Put the Hyperliquid rows into the live portfolio (after a stream update, or after a
-    /// SnapTrade reload replaced the portfolio).
+    /// broker reload replaced the portfolio).
     fn hl_sync_portfolio(&mut self) {
         let Some(master) = self.hl_master() else { return };
         let id = account_id(&master);

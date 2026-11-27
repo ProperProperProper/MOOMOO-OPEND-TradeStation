@@ -1,4 +1,4 @@
-//! End-to-end client test against a local mock of the SnapTrade API: every request's
+//! End-to-end client test against a local mock of the Moomoo OpenD broker API: every request's
 //! signature, timestamp and auth parameters are verified the way the server does, and a full
 //! portfolio is loaded from captured-shape fixtures.
 
@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex};
 use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
-use tr_broker::snaptrade::signature;
-use tr_broker::{Credentials, InstrumentKind, SnapTrade};
+use tr_broker::moomoo::signature;
+use tr_broker::{Credentials, InstrumentKind, MoomooClient};
 
 const CONSUMER_KEY: &str = "test-consumer-key-0123456789";
 const ACCT_A: &str = "917c8734-8470-4a3e-a18f-57c3f2ee6631";
@@ -60,7 +60,7 @@ async fn read_request(sock: &mut tokio::net::TcpStream) -> Option<(String, Strin
     Some((method, target, headers, body))
 }
 
-/// Mock SnapTrade: verifies auth on every request, then routes to fixtures.
+/// Mock broker: verifies auth on every request, then routes to fixtures.
 async fn mock(seen: Arc<Mutex<Vec<Seen>>>, failures: Arc<Mutex<Vec<String>>>) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -91,14 +91,14 @@ async fn mock(seen: Arc<Mutex<Vec<Seen>>>, failures: Arc<Mutex<Vec<String>>>) ->
                 let user_scoped = path.starts_with("/accounts")
                     || path.starts_with("/authorizations")
                     || path.starts_with("/connection/")
-                    || path == "/snapTrade/login";
+                    || path == "/broker/login";
                 if user_scoped
                     && (param("userId").as_deref() != Some("terminal-test")
                         || param("userSecret").as_deref() != Some("s3cr3t/+="))
                 {
                     fail("missing or wrong user credentials".into());
                 }
-                if path == "/snapTrade/registerUser" && param("userSecret").is_some() {
+                if path == "/broker/registerUser" && param("userSecret").is_some() {
                     fail("partner request leaked the user secret".into());
                 }
                 seen.lock().unwrap().push(Seen {
@@ -109,12 +109,12 @@ async fn mock(seen: Arc<Mutex<Vec<Seen>>>, failures: Arc<Mutex<Vec<String>>>) ->
                 });
 
                 let (status, out) = match (method.as_str(), path) {
-                    ("POST", "/snapTrade/registerUser") => {
+                    ("POST", "/broker/registerUser") => {
                         let id = body_json.as_ref().and_then(|b| b["userId"].as_str()).unwrap_or("?").to_string();
                         (200, serde_json::json!({"userId": id, "userSecret": "fresh-secret"}).to_string())
                     }
-                    ("POST", "/snapTrade/login") => {
-                        (200, r#"{"redirectURI":"https://app.snaptrade.com/snapTrade/redeemToken?token=abc","sessionId":"s1"}"#.into())
+                    ("POST", "/broker/login") => {
+                        (200, r#"{"redirectURI":"http://127.0.0.1:11111/broker/redeemToken?token=abc","sessionId":"s1"}"#.into())
                     }
                     ("GET", "/accounts") => (200, fixture("accounts.json")),
                     ("GET", "/authorizations") => (200, fixture("connections.json")),
@@ -166,7 +166,7 @@ async fn loads_a_signed_portfolio() {
     let seen = Arc::new(Mutex::new(Vec::new()));
     let failures = Arc::new(Mutex::new(Vec::new()));
     let base = mock(seen.clone(), failures.clone()).await;
-    let client = SnapTrade::with_base(creds(), &base).unwrap();
+    let client = MoomooClient::with_base(creds(), &base).unwrap();
 
     let pf = client.portfolio().await.unwrap();
     assert_eq!(*failures.lock().unwrap(), Vec::<String>::new());
@@ -242,21 +242,21 @@ async fn registers_a_user_opens_the_portal_and_disconnects() {
     let base = mock(seen.clone(), failures.clone()).await;
 
     let partner =
-        SnapTrade::with_base(Credentials { user_id: String::new(), user_secret: String::new(), ..creds() }, &base)
+        MoomooClient::with_base(Credentials { user_id: String::new(), user_secret: String::new(), ..creds() }, &base)
             .unwrap();
     let (id, secret) = partner.register_user("terminal-test").await.unwrap();
     assert_eq!((id.as_str(), secret.as_str()), ("terminal-test", "fresh-secret"));
 
-    let client = SnapTrade::with_base(creds(), &base).unwrap();
+    let client = MoomooClient::with_base(creds(), &base).unwrap();
     let url = client.connection_portal_url(true, None).await.unwrap();
     client.connection_portal_url(false, Some("c9d1a0f2-0c9e-4a51-8b7e-5d1c2f0a9b11")).await.unwrap();
     client.delete_connection("c9d1a0f2-0c9e-4a51-8b7e-5d1c2f0a9b11").await.unwrap();
     assert!(client.delete_connection("../accounts").await.is_err(), "ids are validated before use in a path");
-    assert!(url.starts_with("https://app.snaptrade.com/"));
+    assert!(url.starts_with("http://127.0.0.1:11111/"));
     assert_eq!(*failures.lock().unwrap(), Vec::<String>::new());
 
     let seen = seen.lock().unwrap().clone();
-    let logins: Vec<_> = seen.iter().filter(|s| s.path == "/snapTrade/login").collect();
+    let logins: Vec<_> = seen.iter().filter(|s| s.path == "/broker/login").collect();
     assert_eq!(logins[0].body.as_ref().unwrap()["connectionType"], "read", "the portal asks for read-only access");
     assert!(logins[0].body.as_ref().unwrap().get("reconnect").is_none());
     assert_eq!(logins[1].body.as_ref().unwrap()["reconnect"], "c9d1a0f2-0c9e-4a51-8b7e-5d1c2f0a9b11");
@@ -268,7 +268,7 @@ async fn registers_a_user_opens_the_portal_and_disconnects() {
 #[tokio::test]
 async fn errors_never_reveal_the_user_secret() {
     // Nothing listens here: the transport error must not echo the URL (which holds the secret).
-    let client = SnapTrade::with_base(creds(), "http://127.0.0.1:9").unwrap();
+    let client = MoomooClient::with_base(creds(), "http://127.0.0.1:9").unwrap();
     let err = format!("{:#}", client.accounts().await.unwrap_err());
     assert!(!err.contains("s3cr3t") && !err.contains("userSecret"), "{err}");
 }
