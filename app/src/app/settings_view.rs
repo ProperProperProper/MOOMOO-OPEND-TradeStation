@@ -601,7 +601,6 @@ impl TerminalApp {
         });
         row(ui, "Show", |ui| {
             ui.checkbox(&mut d.show_volume, "Volume");
-            ui.checkbox(&mut d.congress_markers, "Congress trade markers");
         });
         section(ui, "New order books");
         row(ui, "Depth (levels)", |ui| {

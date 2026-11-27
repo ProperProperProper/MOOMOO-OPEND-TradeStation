@@ -232,13 +232,25 @@ impl LayoutDoc {
         serde_json::to_vec_pretty(self).expect("layout serializes")
     }
 
-    /// The default workspace: chart, Congress feed, world markets and watchlist.
+    /// The default workspace: chart, watchlist, portfolio summary and positions.
     pub fn default_workspace(name: &str, defaults: &crate::prefs::PanelDefaults) -> LayoutDoc {
         let panes = vec![
-            chart_settings("AAPL US Equity", defaults),
-            PaneSettings::Feed(None),
-            PaneSettings::Wei,
+            chart_settings("MRNA US Equity", defaults),
             PaneSettings::Watchlist,
+            PaneSettings::Portfolio {
+                view: crate::command::PortView::Summary,
+                account: None,
+                symbol: None,
+                sort: Default::default(),
+                open_only: false,
+            },
+            PaneSettings::Portfolio {
+                view: crate::command::PortView::Positions,
+                account: None,
+                symbol: None,
+                sort: Default::default(),
+                open_only: false,
+            },
         ];
         Self::preset(name, Layout::Grid2x2, panes)
     }
@@ -272,7 +284,7 @@ pub fn chart_settings(symbol: &str, d: &crate::prefs::PanelDefaults) -> PaneSett
         drawings: Vec::new(),
         compare: None,
         show_volume: d.show_volume,
-        show_congress: d.congress_markers,
+        show_congress: false,
         magnet: false,
     }
 }

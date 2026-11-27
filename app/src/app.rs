@@ -1156,8 +1156,8 @@ impl TerminalApp {
                 }
                 Response::MoomooPaperSynced(result) => {
                     match result {
-                        Ok((funds, positions)) => {
-                            self.demo.on_opend_synced(funds, positions);
+                        Ok((funds, positions, orders)) => {
+                            self.demo.on_opend_synced(funds, positions, orders);
                         }
                         Err(e) => {
                             tracing::debug!("OpenD paper sync: {e}");

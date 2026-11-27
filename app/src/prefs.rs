@@ -188,7 +188,7 @@ impl Default for PanelDefaults {
             chart_type: ChartType::Candles,
             timeframe: Timeframe::M1,
             show_volume: true,
-            congress_markers: true,
+            congress_markers: false,
             book_depth: 20,
         }
     }

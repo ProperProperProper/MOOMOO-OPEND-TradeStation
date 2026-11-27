@@ -1,5 +1,5 @@
 pub mod opend_proto;
-pub use opend_proto::{OpenDFunds, OpenDPosition, OpenDProtoSession};
+pub use opend_proto::{OpenDFunds, OpenDPosition, OpenDOrder, OpenDProtoSession};
 
 use std::collections::HashSet;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
@@ -310,8 +310,8 @@ impl OpenDClient {
         guard.as_ref().is_some_and(|set| set.contains(&ticker) || set.contains(&upper))
     }
 
-    /// Fetches live paper trading funds and open positions from local OpenD.
-    pub async fn fetch_paper_trading(&self) -> Result<(OpenDFunds, Vec<OpenDPosition>)> {
+    /// Fetches live paper trading funds, open positions and order history from local OpenD.
+    pub async fn fetch_paper_trading(&self) -> Result<(OpenDFunds, Vec<OpenDPosition>, Vec<OpenDOrder>)> {
         let mut session = OpenDProtoSession::connect(&self.addr).await?;
         let paper_accs = session.get_paper_accounts().await?;
         let (acc_id, market) = paper_accs
@@ -323,7 +323,8 @@ impl OpenDClient {
 
         let funds = session.get_funds(acc_id, market).await?;
         let positions = session.get_positions(acc_id, market).await.unwrap_or_default();
-        Ok((funds, positions))
+        let orders = session.get_orders(acc_id, market).await.unwrap_or_default();
+        Ok((funds, positions, orders))
     }
 
     /// Fetches Moomoo account information for either Paper Trading (Simulate) or Live Trading (Real).

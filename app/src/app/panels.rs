@@ -218,10 +218,6 @@ impl TerminalApp {
                         out.push(Action::OpenChart(s.clone()));
                         ui.close();
                     }
-                    if sec.has_congress_trades() && ui.button("Who in Congress Traded This").clicked() {
-                        out.push(Action::OpenTicker(sec.ticker.clone()));
-                        ui.close();
-                    }
                     ui.separator();
                     if ui.button("Remove from Watchlist").clicked() {
                         remove = Some(s.clone());

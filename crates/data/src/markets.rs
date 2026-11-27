@@ -60,34 +60,59 @@ impl MarketData for Markets {
             bail!("SECURITY RESTRICTION: Data feed for '{}' blocked. Only instruments in your Moomoo account watchlist are permitted.", sec.ticker);
         }
 
-        // Fetch 1-minute bars strictly (scaled by timeframe multiplier so resampled has enough count)
-        let m1_limit = (limit * tf.minutes() as usize).max(limit);
-        let m1_bars = self.moomoo.fetch_1min_history(&sec.ticker, m1_limit).await?;
-        let mapped: Vec<Bar> = m1_bars
-            .into_iter()
-            .map(|b| Bar {
-                ts: b.ts,
-                open: b.open,
-                high: b.high,
-                low: b.low,
-                close: b.close,
-                volume: b.volume,
-            })
-            .collect();
-
-        // Persist 1-minute candles to disk cache so they are stored forever
-        if !mapped.is_empty() {
-            if let Ok(mut guard) = self.cache.lock() {
-                if let Some(c) = guard.as_mut() {
-                    let _ = c.store(&sec.ticker, Timeframe::M1, &mapped);
-                    let _ = c.store(symbol, Timeframe::M1, &mapped);
+        // 1. Load any stored 1-minute bars from SQLite disk cache
+        let mut all_1m_bars: Vec<Bar> = Vec::new();
+        if let Ok(guard) = self.cache.lock() {
+            if let Some(c) = guard.as_ref() {
+                if let Ok(loaded) = c.load(&sec.ticker, Timeframe::M1, 5000) {
+                    all_1m_bars = loaded;
+                }
+                if all_1m_bars.is_empty() {
+                    if let Ok(loaded) = c.load(symbol, Timeframe::M1, 5000) {
+                        all_1m_bars = loaded;
+                    }
                 }
             }
         }
 
-        // Dynamically aggregate to calculate the requested interval (1m..9m)
-        let aggregated = tf.resample(&mapped);
+        // 2. Query fresh 1-minute bars from OpenD if available
+        let m1_limit = (limit * tf.minutes() as usize).max(limit).clamp(100, 1000);
+        if let Ok(fresh) = self.moomoo.fetch_1min_history(&sec.ticker, m1_limit).await {
+            if !fresh.is_empty() {
+                let mapped: Vec<Bar> = fresh
+                    .into_iter()
+                    .map(|b| Bar {
+                        ts: b.ts,
+                        open: b.open,
+                        high: b.high,
+                        low: b.low,
+                        close: b.close,
+                        volume: b.volume,
+                    })
+                    .collect();
 
+                // Persist new 1-minute candles to disk cache so they are stored forever
+                if let Ok(mut guard) = self.cache.lock() {
+                    if let Some(c) = guard.as_mut() {
+                        let _ = c.store(&sec.ticker, Timeframe::M1, &mapped);
+                        let _ = c.store(symbol, Timeframe::M1, &mapped);
+                    }
+                }
+
+                all_1m_bars.extend(mapped);
+                all_1m_bars.sort_by_key(|b| b.ts);
+                all_1m_bars.dedup_by_key(|b| b.ts);
+            }
+        }
+
+        if all_1m_bars.is_empty() {
+            bail!("No real candle data available for '{symbol}'. Synthetic fallback is disabled.");
+        }
+
+        // 3. Dynamically aggregate strictly from the real 1m candles we have
+        let aggregated = tf.resample(&all_1m_bars);
+
+        // 4. Return strictly by as much real candle data as we have
         Ok(crate::clip(aggregated, end, limit))
     }
 

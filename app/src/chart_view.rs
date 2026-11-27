@@ -1108,13 +1108,6 @@ impl ChartState {
             self.actions.push(Action::AddToWatchlist(self.symbol.clone()));
             ui.close();
         }
-        if self.sec.has_congress_trades() {
-            ui.checkbox(&mut self.show_congress, "Congress Trade Markers");
-            if ui.button("Who in Congress Traded This…").clicked() {
-                self.actions.push(Action::OpenTicker(self.symbol.clone()));
-                ui.close();
-            }
-        }
     }
 
     /// The range row's link between a security and its HIP-3 perp, drawn when it fits in

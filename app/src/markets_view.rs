@@ -154,7 +154,7 @@ pub fn tenor_label(years: f64) -> String {
 pub fn curve(ui: &mut Ui, curves: Option<&YieldCurves>) -> Vec<Action> {
     let mut out = Vec::new();
     let Some(c) = curves else {
-        ui.label(RichText::new("Loading US Treasury par yield curve (Treasury.gov)…").font(mono(12.0)).color(muted()));
+        ui.label(RichText::new("Yield curve unavailable (synthetic data disabled; only real Moomoo OpenD data is permitted).").font(mono(12.0)).color(muted()));
         return out;
     };
     let date =

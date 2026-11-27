@@ -361,9 +361,6 @@ impl<P: MarketData> MarketData for Fallback<P> {
 
     async fn quotes(&self, symbols: &[String]) -> Result<Vec<Quote>> {
         match self.primary.quotes(symbols).await {
-            // If the primary produced nothing at all (offline), serve sample quotes rather
-            // than an empty panel; partial results are never mixed with synthetic prices. Perps
-            // are never filled in.
             Ok(mut q) => {
                 let missing: Vec<String> =
                     symbols.iter().filter(|s| !is_perp(s) && !q.iter().any(|x| &x.symbol == *s)).cloned().collect();
@@ -461,13 +458,13 @@ pub fn from_env() -> Provider {
         return Arc::new(sample::SampleProvider::default().with_live_ticks());
     }
     let markets = match markets::Markets::new() {
-        Ok(m) => Fallback::new(m),
+        Ok(m) => Arc::new(m),
         Err(e) => {
-            tracing::warn!("Moomoo OpenD init failed, using sample data: {e:#}");
-            return Arc::new(sample::SampleProvider::default().with_live_ticks());
+            tracing::error!("Moomoo OpenD init failed: {e:#}");
+            panic!("Moomoo OpenD initialization failed: {e:#}. Synthetic sample fallback is disabled.");
         }
     };
-    Arc::new(markets)
+    markets
 }
 
 /// The browser build's provider: sample data only when `offline`, otherwise live crypto

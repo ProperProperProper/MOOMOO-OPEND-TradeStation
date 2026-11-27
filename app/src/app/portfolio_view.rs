@@ -272,10 +272,6 @@ fn security_menu(ui: &mut Ui, key: &str, symbol: &str, out: &mut Vec<PortAction>
         out.push(PortAction::News(key.to_string()));
         ui.close();
     }
-    if sec.has_congress_trades() && ui.button("Who in Congress Traded This").clicked() {
-        out.push(PortAction::Core(Action::OpenTicker(sec.ticker.clone())));
-        ui.close();
-    }
     if ui.button("Add to Watchlist").clicked() {
         out.push(PortAction::Core(Action::AddToWatchlist(key.to_string())));
         ui.close();

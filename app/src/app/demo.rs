@@ -91,8 +91,13 @@ impl DemoState {
         )
     }
 
-    /// Updates the book with live paper trading funds and positions from Moomoo OpenD.
-    pub fn on_opend_synced(&mut self, funds: tr_moomoo::OpenDFunds, positions: Vec<tr_moomoo::OpenDPosition>) {
+    /// Updates the book with live paper trading funds, positions and orders from Moomoo OpenD.
+    pub fn on_opend_synced(
+        &mut self,
+        funds: tr_moomoo::OpenDFunds,
+        positions: Vec<tr_moomoo::OpenDPosition>,
+        orders: Vec<tr_moomoo::OpenDOrder>,
+    ) {
         self.book.sync_opend_funds(&funds.acc_id, funds.cash, funds.total_assets);
         if !positions.is_empty() {
             let mut mapped = Vec::new();
@@ -115,6 +120,73 @@ impl DemoState {
             }
             self.book.positions = mapped;
         }
+
+        if !orders.is_empty() {
+            let mut mapped_orders = Vec::new();
+            let mut mapped_activities = Vec::new();
+            for o in &orders {
+                let sym = tr_broker::trading::clean_symbol(&o.symbol).unwrap_or_else(|| o.symbol.clone());
+                let action = if o.side == 1 { "BUY" } else { "SELL" };
+                let status = match o.order_status {
+                    11 => "EXECUTED",
+                    12 => "PARTIAL",
+                    14 | 21 => "CANCELED",
+                    4 | 5 | 15 => "REJECTED",
+                    _ => "PENDING",
+                };
+                let placed = if o.create_timestamp > 0 {
+                    chrono::DateTime::from_timestamp(o.create_timestamp, 0)
+                } else {
+                    None
+                };
+                let updated = if o.update_timestamp > 0 {
+                    chrono::DateTime::from_timestamp(o.update_timestamp, 0)
+                } else {
+                    placed
+                };
+
+                mapped_orders.push(tr_broker::Order {
+                    account_id: tr_broker::demo::ACCOUNT_ID.into(),
+                    id: o.order_id.clone(),
+                    symbol: sym.clone(),
+                    description: o.name.clone(),
+                    kind: tr_broker::InstrumentKind::Stock,
+                    action: action.into(),
+                    status: status.into(),
+                    order_type: "LIMIT".into(),
+                    time_in_force: "DAY".into(),
+                    quantity: Some(o.qty),
+                    filled: Some(o.fill_qty),
+                    limit_price: Some(o.price),
+                    stop_price: None,
+                    execution_price: if o.fill_avg_price > 0.0 { Some(o.fill_avg_price) } else { None },
+                    placed,
+                    updated,
+                    underlying: None,
+                    market: None,
+                });
+
+                if o.fill_qty > 0.0 {
+                    mapped_activities.push(tr_broker::Activity {
+                        account_id: tr_broker::demo::ACCOUNT_ID.into(),
+                        id: format!("fill-{}", o.order_id),
+                        kind: action.into(),
+                        symbol: Some(sym),
+                        description: format!("{} {}", if o.side == 1 { "Bought" } else { "Sold" }, o.name),
+                        units: Some(o.fill_qty),
+                        price: Some(if o.fill_avg_price > 0.0 { o.fill_avg_price } else { o.price }),
+                        amount: Some(o.fill_qty * (if o.fill_avg_price > 0.0 { o.fill_avg_price } else { o.price })),
+                        fee: Some(0.0),
+                        currency: "USD".into(),
+                        trade_date: updated,
+                        settlement_date: updated,
+                        market: None,
+                    });
+                }
+            }
+            self.book.sync_opend_orders_and_activities(mapped_orders, mapped_activities);
+        }
+
         self.changed();
     }
 

@@ -327,7 +327,7 @@ pub enum Response {
     PerpMarkets(Result<Vec<String>, String>),
     Trade(Box<TradeResponse>),
     Hl(Box<crate::hl_worker::HlResponse>),
-    MoomooPaperSynced(Result<(tr_moomoo::OpenDFunds, Vec<tr_moomoo::OpenDPosition>), String>),
+    MoomooPaperSynced(Result<(tr_moomoo::OpenDFunds, Vec<tr_moomoo::OpenDPosition>, Vec<tr_moomoo::OpenDOrder>), String>),
 }
 
 pub struct Worker {
@@ -777,7 +777,112 @@ async fn handle(s: &Arc<Shared>, req: Request) {
         },
         Request::Portfolio(creds) => {
             let result = match creds {
-                None => Ok(tr_broker::sample::portfolio()),
+                None => {
+                    let client = tr_moomoo::OpenDClient::default();
+                    match client.fetch_paper_trading().await {
+                        Ok((funds, positions, orders)) => {
+                            let mut pf = tr_broker::Portfolio {
+                                fetched: Some(chrono::Utc::now()),
+                                demo: false,
+                                simulated: false,
+                                ..Default::default()
+                            };
+                            let acct = tr_broker::Account {
+                                id: funds.acc_id.clone(),
+                                name: "Moomoo Paper Account".into(),
+                                number: funds.acc_id.clone(),
+                                institution: "Moomoo OpenD".into(),
+                                currency: funds.currency.clone(),
+                                total: Some(funds.total_assets),
+                                cash: Some(funds.cash),
+                                buying_power: Some(funds.power),
+                                kind: "Paper".into(),
+                                status: "open".into(),
+                                is_paper: true,
+                                synced: Some(chrono::Utc::now()),
+                                connection_id: String::new(),
+                            };
+                            pf.accounts.push(acct);
+                            for p in positions {
+                                let sym = tr_broker::trading::clean_symbol(&p.symbol).unwrap_or(p.symbol);
+                                pf.positions.push(tr_broker::Position {
+                                    account_id: funds.acc_id.clone(),
+                                    symbol: sym,
+                                    description: p.name,
+                                    kind: tr_broker::InstrumentKind::Stock,
+                                    units: p.qty,
+                                    price: Some(p.price),
+                                    cost_basis: Some(p.cost_price),
+                                    multiplier: 1.0,
+                                    currency: "USD".into(),
+                                    cash_equivalent: false,
+                                    underlying: None,
+                                    market: None,
+                                });
+                            }
+                            for o in &orders {
+                                let sym = tr_broker::trading::clean_symbol(&o.symbol).unwrap_or_else(|| o.symbol.clone());
+                                let action = if o.side == 1 { "BUY" } else { "SELL" };
+                                let status = match o.order_status {
+                                    11 => "EXECUTED",
+                                    12 => "PARTIAL",
+                                    14 | 21 => "CANCELED",
+                                    4 | 5 | 15 => "REJECTED",
+                                    _ => "PENDING",
+                                };
+                                let placed = if o.create_timestamp > 0 {
+                                    chrono::DateTime::from_timestamp(o.create_timestamp, 0)
+                                } else {
+                                    None
+                                };
+                                let updated = if o.update_timestamp > 0 {
+                                    chrono::DateTime::from_timestamp(o.update_timestamp, 0)
+                                } else {
+                                    placed
+                                };
+                                pf.orders.push(tr_broker::Order {
+                                    account_id: funds.acc_id.clone(),
+                                    id: o.order_id.clone(),
+                                    symbol: sym.clone(),
+                                    description: o.name.clone(),
+                                    kind: tr_broker::InstrumentKind::Stock,
+                                    action: action.into(),
+                                    status: status.into(),
+                                    order_type: "LIMIT".into(),
+                                    time_in_force: "DAY".into(),
+                                    quantity: Some(o.qty),
+                                    filled: Some(o.fill_qty),
+                                    limit_price: Some(o.price),
+                                    stop_price: None,
+                                    execution_price: if o.fill_avg_price > 0.0 { Some(o.fill_avg_price) } else { None },
+                                    placed,
+                                    updated,
+                                    underlying: None,
+                                    market: None,
+                                });
+                                if o.fill_qty > 0.0 {
+                                    pf.activities.push(tr_broker::Activity {
+                                        account_id: funds.acc_id.clone(),
+                                        id: format!("fill-{}", o.order_id),
+                                        kind: action.into(),
+                                        symbol: Some(sym),
+                                        description: format!("{} {}", if o.side == 1 { "Bought" } else { "Sold" }, o.name),
+                                        units: Some(o.fill_qty),
+                                        price: Some(if o.fill_avg_price > 0.0 { o.fill_avg_price } else { o.price }),
+                                        amount: Some(o.fill_qty * (if o.fill_avg_price > 0.0 { o.fill_avg_price } else { o.price })),
+                                        fee: Some(0.0),
+                                        currency: "USD".into(),
+                                        trade_date: updated,
+                                        settlement_date: updated,
+                                        market: None,
+                                    });
+                                }
+                            }
+                            Ok(pf)
+                        }
+                        Err(e) => Err(anyhow::anyhow!("Failed to fetch live portfolio from OpenD: {e:#}. Synthetic sample fallback is disabled.")),
+                    }
+                }
                 Some(c) => match tr_broker::MoomooClient::new(c) {
                     Ok(client) => client.portfolio().await,
                     Err(e) => Err(e),

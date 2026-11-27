@@ -247,6 +247,17 @@ impl DemoBook {
         }
     }
 
+    /// Sync orders and activity fills from live Moomoo OpenD paper account.
+    pub fn sync_opend_orders_and_activities(&mut self, orders: Vec<Order>, activities: Vec<Activity>) {
+        if !orders.is_empty() {
+            self.orders = orders;
+        }
+        if !activities.is_empty() {
+            self.activities = activities;
+        }
+        self.updated = Some(Utc::now());
+    }
+
     /// The account as the portfolio panes show it.
     pub fn account(&self) -> Account {
         let number = self.opend_account_id.as_deref().unwrap_or("PAPER");

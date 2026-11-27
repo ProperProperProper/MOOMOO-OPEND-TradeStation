@@ -29,6 +29,22 @@ pub struct OpenDPosition {
     pub pl_val: f64,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OpenDOrder {
+    pub order_id: String,
+    pub symbol: String,
+    pub name: String,
+    pub side: i32, // 1 = Buy, 2 = Sell
+    pub order_type: i32,
+    pub order_status: i32, // 10 = Submitted/Queued, 11 = Filled, 14 = Cancelled, etc.
+    pub qty: f64,
+    pub price: f64,
+    pub fill_qty: f64,
+    pub fill_avg_price: f64,
+    pub create_timestamp: i64,
+    pub update_timestamp: i64,
+}
+
 pub struct OpenDProtoSession {
     stream: TcpStream,
     serial_no: u32,
@@ -216,6 +232,60 @@ impl OpenDProtoSession {
                         pl_val,
                     });
                 }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Fetches order list for a specific paper account (ProtoID 2201: Trd_GetOrderList)
+    pub async fn get_orders(&mut self, acc_id: u64, trd_market: i32) -> Result<Vec<OpenDOrder>> {
+        let req = serde_json::json!({
+            "c2s": {
+                "header": {
+                    "trdEnv": 0,
+                    "accID": acc_id,
+                    "trdMarket": trd_market
+                },
+                "refreshCache": true
+            }
+        });
+        let res = self.query(2201, &req).await?;
+        let mut out = Vec::new();
+        if let Some(orders) = res.pointer("/s2c/orderList").and_then(|v| v.as_array()) {
+            for o in orders {
+                let order_id = o.get("orderID")
+                    .and_then(|v| v.as_str().map(|s| s.to_string()).or_else(|| v.as_i64().map(|n| n.to_string())))
+                    .unwrap_or_default();
+                let code = o.get("code").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let name = o.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let side = o.get("trdSide").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
+                let order_type = o.get("orderType").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                let order_status = o.get("orderStatus").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                let qty = o.get("qty").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let price = o.get("price").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let fill_qty = o.get("fillQty").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let fill_avg_price = o.get("fillAvgPrice").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let create_timestamp = o.get("createTimestamp")
+                    .and_then(|v| v.as_str().and_then(|s| s.parse::<i64>().ok()).or_else(|| v.as_i64()))
+                    .unwrap_or(0);
+                let update_timestamp = o.get("updateTimestamp")
+                    .and_then(|v| v.as_str().and_then(|s| s.parse::<i64>().ok()).or_else(|| v.as_i64()))
+                    .unwrap_or(create_timestamp);
+
+                out.push(OpenDOrder {
+                    order_id,
+                    symbol: code,
+                    name,
+                    side,
+                    order_type,
+                    order_status,
+                    qty,
+                    price,
+                    fill_qty,
+                    fill_avg_price,
+                    create_timestamp,
+                    update_timestamp,
+                });
             }
         }
         Ok(out)

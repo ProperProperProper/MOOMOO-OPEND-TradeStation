@@ -610,10 +610,6 @@ impl TerminalApp {
                         out.push(SidebarCmd::Action(Action::OpenChart(key.clone())));
                         ui.close();
                     }
-                    if sec.has_congress_trades() && ui.button("Who in Congress Traded This").clicked() {
-                        out.push(SidebarCmd::Action(Action::OpenTicker(sec.ticker.clone())));
-                        ui.close();
-                    }
                     if ui.button("Compare on Chart").clicked() {
                         out.push(SidebarCmd::Function(Function::Compare(Some(key.clone()))));
                         ui.close();
@@ -630,31 +626,6 @@ impl TerminalApp {
             }
             if nav_row(ui, Icon::List, "Open Watchlist Pane", None, is_focused(&PaneKind::Watchlist)).clicked() {
                 out.push(SidebarCmd::Function(Function::Watchlist));
-            }
-
-            section(ui, "Markets");
-            let items = [
-                (Icon::Globe, "World Markets", "WEI", Function::Wei, PaneKind::Wei),
-                (Icon::Curve, "Yield Curve", "GC", Function::Curve, PaneKind::Curve),
-                (
-                    Icon::Chart,
-                    "Options",
-                    "OMON",
-                    Function::Options,
-                    PaneKind::Options(Box::new(super::OptionsPane::new("", 0, true))),
-                ),
-                (
-                    Icon::Search,
-                    "Security Search",
-                    "SECF",
-                    Function::Search(String::new()),
-                    PaneKind::Search { query: String::new() },
-                ),
-            ];
-            for (icon, label, code, f, kind) in items {
-                if nav_row(ui, icon, label, Some(code), is_focused(&kind)).clicked() {
-                    out.push(SidebarCmd::Function(f));
-                }
             }
 
             section(ui, "Portfolio");
@@ -690,61 +661,6 @@ impl TerminalApp {
                 .on_hover_text("Moomoo OpenD Gateway: local connection, watchlist status, test");
             if resp.clicked() {
                 out.push(SidebarCmd::Function(Function::Portfolio(V::Summary, "SETUP".into())));
-            }
-
-            section(ui, "Congress");
-            let unread = self.alerts.iter().filter(|a| !a.seen).count();
-            if nav_row(
-                ui,
-                Icon::List,
-                "Latest Trades",
-                Some("CONG"),
-                is_focused(&PaneKind::Feed { filter: Default::default() }),
-            )
-            .clicked()
-            {
-                out.push(SidebarCmd::Function(Function::Congress));
-            }
-            if nav_row(ui, Icon::People, "Politicians", Some("POL"), is_focused(&PaneKind::Politicians)).clicked() {
-                out.push(SidebarCmd::Function(Function::Politician(String::new())));
-            }
-            let badge = (unread > 0).then(|| unread.to_string());
-            if nav_row(ui, Icon::Bell, "Alerts", badge.as_deref().or(Some("ALRT")), is_focused(&PaneKind::Alerts))
-                .clicked()
-            {
-                out.push(SidebarCmd::Function(Function::Alerts));
-            }
-            let tracked: Vec<_> = self.politicians.iter().filter(|s| s.tracked).collect();
-            if !tracked.is_empty() {
-                section(ui, "Tracked");
-                for s in tracked {
-                    let resp = row_frame(ui, false);
-                    let r = resp.rect;
-                    let pt = ui.painter();
-                    let pol = &s.politician;
-                    pt.circle_filled(pos2(r.left() + 12.0, r.center().y), 4.0, theme::party_color(pol.party));
-                    pt.text(pos2(r.left() + 24.0, r.center().y), Align2::LEFT_CENTER, &pol.name, ui_font(12.5), text());
-                    pt.text(
-                        pos2(r.right() - 8.0, r.center().y),
-                        Align2::RIGHT_CENTER,
-                        s.trades.to_string(),
-                        mono(11.0),
-                        muted(),
-                    );
-                    if resp.clicked() {
-                        out.push(SidebarCmd::Action(Action::OpenProfile(pol.name.clone())));
-                    }
-                    resp.context_menu(|ui| {
-                        if ui.button("Open Profile").clicked() {
-                            out.push(SidebarCmd::Action(Action::OpenProfile(pol.name.clone())));
-                            ui.close();
-                        }
-                        if ui.button("Stop Tracking").clicked() {
-                            out.push(SidebarCmd::Action(Action::Track(pol.name.clone(), false)));
-                            ui.close();
-                        }
-                    });
-                }
             }
 
             self.sidebar_layouts(ui, &mut out);
@@ -844,7 +760,6 @@ impl TerminalApp {
             use crate::prefs::Action as A;
             let keys: Vec<(String, &str)> = [
                 (A::Help, "Help"),
-                (A::Congress, "Congress"),
                 (A::Watchlist, "Watchlist"),
                 (A::NextPane, "Next Pane"),
                 (A::SplitRight, "Split"),
