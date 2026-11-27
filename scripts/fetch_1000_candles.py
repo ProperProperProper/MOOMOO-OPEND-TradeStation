@@ -22,16 +22,9 @@ SYMBOLS = [
     "US.ANT",
     "US.NVDA",
     "US.MU",
+    "US.SNDK",
     "US.OMH",
     "US.APP",
-    "US.AAPL",
-    "US.MSFT",
-    "US.GOOGL",
-    "US.AMZN",
-    "US.TSLA",
-    "US.META",
-    "US.SPY",
-    "US.QQQ",
 ]
 
 def clean_candle_frame(df: pd.DataFrame) -> pd.DataFrame:

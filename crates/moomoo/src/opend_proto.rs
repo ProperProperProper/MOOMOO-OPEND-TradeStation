@@ -221,6 +221,33 @@ impl OpenDProtoSession {
         Ok(out)
     }
 
+    /// Fetches securities in a user watchlist group (ProtoID 3213: Qot_GetUserSecurity)
+    pub async fn get_user_security(&mut self, group_name: &str) -> Result<Vec<String>> {
+        let req = serde_json::json!({
+            "c2s": {
+                "groupName": group_name
+            }
+        });
+        let res = self.query(3213, &req).await?;
+        let ret_type = res.get("retType").and_then(|v| v.as_i64()).unwrap_or(-1);
+        if ret_type != 0 {
+            let msg = res.get("retMsg").and_then(|v| v.as_str()).unwrap_or("unknown error");
+            bail!("Qot_GetUserSecurity error: {msg}");
+        }
+
+        let mut symbols = Vec::new();
+        if let Some(list) = res.pointer("/s2c/staticInfoList").and_then(|v| v.as_array()) {
+            for item in list {
+                if let Some(code) = item.pointer("/basic/security/code").and_then(|v| v.as_str()) {
+                    if !code.is_empty() {
+                        symbols.push(code.to_string());
+                    }
+                }
+            }
+        }
+        Ok(symbols)
+    }
+
     /// Fetches 1-minute historical candlestick bars from OpenD (ProtoID 3103: Qot_RequestHistoryKL)
     /// market 11 = US Equities. klType 1 = 1-minute. rehabType 1 = forward adjusted.
     pub async fn get_1min_history(&mut self, symbol: &str, limit: usize) -> Result<Vec<crate::Bar>> {

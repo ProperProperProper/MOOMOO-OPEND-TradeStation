@@ -235,14 +235,27 @@ impl OpenDClient {
 
         let mut symbols = Vec::new();
 
-        if let Ok(resp) = self.http_client.get(&url).send().await {
-            if resp.status().is_success() {
-                if let Ok(res) = resp.json::<Vec<String>>().await {
-                    symbols = res;
+        // 1. Query MooComp watchlist directly from OpenD protocol (ProtoID 3213)
+        if let Ok(mut session) = OpenDProtoSession::connect(&self.addr).await {
+            if let Ok(group_symbols) = session.get_user_security("MooComp").await {
+                if !group_symbols.is_empty() {
+                    symbols = group_symbols;
                 }
             }
         }
 
+        // 2. HTTP gateway fallback if configured
+        if symbols.is_empty() {
+            if let Ok(resp) = self.http_client.get(&url).send().await {
+                if resp.status().is_success() {
+                    if let Ok(res) = resp.json::<Vec<String>>().await {
+                        symbols = res;
+                    }
+                }
+            }
+        }
+
+        // 3. Environment variable fallback
         if symbols.is_empty() {
             if let Ok(watchlist_env) = std::env::var("MOOMOO_WATCHLIST") {
                 symbols = watchlist_env
@@ -253,6 +266,7 @@ impl OpenDClient {
             }
         }
 
+        // 4. Default strictly to user's MooComp watchlist
         if symbols.is_empty() {
             symbols = vec![
                 "MRNA".to_string(),
@@ -262,14 +276,6 @@ impl OpenDClient {
                 "SNDK".to_string(),
                 "OMH".to_string(),
                 "APP".to_string(),
-                "AAPL".to_string(),
-                "MSFT".to_string(),
-                "GOOGL".to_string(),
-                "AMZN".to_string(),
-                "TSLA".to_string(),
-                "META".to_string(),
-                "SPY".to_string(),
-                "QQQ".to_string(),
             ];
         }
 
@@ -553,16 +559,19 @@ mod tests {
     async fn test_watchlist_enforcement() {
         let client = OpenDClient::default();
         let wl = client.fetch_watchlist().await.unwrap();
-        assert!(wl.contains(&"AAPL".to_string()));
+        assert!(wl.contains(&"MRNA".to_string()));
+        assert!(wl.contains(&"ANT".to_string()));
 
         // Watchlist symbol succeeds
-        assert!(client.is_in_watchlist("AAPL").await);
-        assert!(client.is_in_watchlist("US.AAPL").await);
-        assert!(client.is_in_watchlist("AAPL US Equity").await);
-        assert!(client.fetch_quote("AAPL").await.is_ok());
-        assert!(client.fetch_quote("US.AAPL").await.is_ok());
+        assert!(client.is_in_watchlist("MRNA").await);
+        assert!(client.is_in_watchlist("US.MRNA").await);
+        assert!(client.is_in_watchlist("MRNA US Equity").await);
+        assert!(client.fetch_quote("MRNA").await.is_ok());
+        assert!(client.fetch_quote("US.MRNA").await.is_ok());
 
-        // Non-watchlist symbol MUST be blocked
+        // Non-watchlist symbol MUST be blocked (AAPL removed from watchlist)
+        assert!(!client.is_in_watchlist("AAPL").await);
+        assert!(client.fetch_quote("AAPL").await.is_err());
         assert!(!client.is_in_watchlist("UNKNOWN_COIN").await);
         assert!(client.fetch_quote("UNKNOWN_COIN").await.is_err());
         assert!(client.subscribe_quotes("UNKNOWN_COIN").is_none());
