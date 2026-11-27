@@ -20,19 +20,11 @@ use crate::widgets::{self, Icon};
 use crate::worker::{Request, Worker};
 
 /// Panels offered by the + menus: label and command word.
-pub const PANELS: [(&str, &str); 14] = [
+pub const PANELS: [(&str, &str); 6] = [
     ("Chart", "CHART"),
     ("Watchlist", "WL"),
-    ("News", "NEWS"),
-    ("Order Book", "BOOK"),
-    ("Options", "OMON"),
     ("Portfolio", "PORT"),
-    ("World Markets", "WEI"),
-    ("Yield Curve", "GC"),
-    ("Congress Feed", "CONG"),
-    ("Politicians", "POL"),
-    ("Alerts", "ALRT"),
-    ("Security Search", "SECF"),
+    ("Equity Curve", "EQ"),
     ("Settings", "PREFS"),
     ("Help", "HELP"),
 ];
@@ -739,7 +731,7 @@ impl TerminalApp {
                 PaneKind::Portfolio(Box::new(super::broker::PortfolioPane::new(view)))
             }
             "WEI" | "MARKETS" => PaneKind::Wei,
-            "GC" | "CURVE" | "YC" => PaneKind::Curve,
+            "EQ" | "EQUITY" | "GC" | "CURVE" | "YC" => PaneKind::Curve,
             "CONG" | "FEED" | "CONGRESS" => PaneKind::Feed { filter: FeedFilter::default() },
             "POL" | "POLITICIANS" => PaneKind::Politicians,
             "ALRT" | "ALERTS" => PaneKind::Alerts,

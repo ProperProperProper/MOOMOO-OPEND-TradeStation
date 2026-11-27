@@ -30,17 +30,8 @@ const COMMANDS: &[(&str, &str, &str, Option<Action>)] = &[
     ("PORT REFRESH", "", "brokerage sync reload", None),
     ("PORT CONNECT", "", "brokerage link moomoo opend", None),
     ("OMON", "", "options chain calls puts greeks", Some(Action::NewOptions)),
-    ("CONG", "Congressional trades feed", "congress disclosures", Some(Action::Congress)),
-    ("POL", "Politicians", "congress members profile", Some(Action::Politicians)),
-    ("ALRT", "", "alerts tracked filings", Some(Action::Alerts)),
-    ("REFRESH", "", "congress disclosures sync", Some(Action::Refresh)),
     ("WL", "", "watchlist monitor", Some(Action::Watchlist)),
-    ("N", "", "news headlines", None),
-    ("OB", "", "order book depth dom", None),
-    ("PERP", "", "hip-3 perpetual hyperliquid xyz perps stock perp", Some(Action::TogglePerp)),
-    ("WEI", "", "world equity indices markets", None),
-    ("GC", "", "yield curve treasury rates", None),
-    ("SECF", "Security search", "search find", None),
+    ("EQ", "Equity curve", "paper account equity curve session pnl", None),
     ("LAYOUTS", "", "saved layouts workspaces", None),
     ("LAYOUT NEW", "Start a new saved layout", "workspace", None),
     ("SPLIT", "", "split right pane", Some(Action::SplitRight)),
@@ -635,7 +626,7 @@ mod tests {
     fn catalogue_covers_commands_panels_actions_and_settings() {
         let items = static_items();
         let has = |kind: Kind, title: &str| items.iter().any(|i| i.kind == kind && i.title == title);
-        for code in ["PORT", "POS", "ORD", "OMON", "THEME NEXT", "CONG", "WEI", "GC", "HELP"] {
+        for code in ["PORT", "POS", "ORD", "OMON", "THEME NEXT", "WL", "EQ", "HELP"] {
             assert!(has(Kind::Command, code), "{code}");
         }
         assert!(has(Kind::Panel, "New Options chain pane"));

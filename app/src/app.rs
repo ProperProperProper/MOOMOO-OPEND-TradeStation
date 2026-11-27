@@ -222,7 +222,7 @@ impl PaneKind {
             PaneKind::Watchlist => "Watchlist".into(),
             PaneKind::Help => "Help".into(),
             PaneKind::Wei => "World Markets".into(),
-            PaneKind::Curve => "Yield Curve".into(),
+            PaneKind::Curve => "Equity Curve".into(),
             PaneKind::Search { query } if query.is_empty() => "Search".into(),
             PaneKind::Search { query } => format!("Search: {query}"),
             PaneKind::News(n) => match &n.symbol {
@@ -246,7 +246,7 @@ impl PaneKind {
             PaneKind::Watchlist => "WL",
             PaneKind::Help => "HELP",
             PaneKind::Wei => "WEI",
-            PaneKind::Curve => "GC",
+            PaneKind::Curve => "EQ",
             PaneKind::Search { .. } => "SECF",
             PaneKind::News(_) => "CN",
             PaneKind::OrderBook(_) => "OB",
@@ -982,7 +982,7 @@ impl TerminalApp {
                 self.open_panel(PaneKind::Wei);
             }
             Function::Curve => {
-                self.worker.send(Request::YieldCurves);
+                self.worker.send(Request::SyncMoomooPaper);
                 self.last_curve = Some(Instant::now());
                 self.open_panel(PaneKind::Curve);
             }

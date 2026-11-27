@@ -349,7 +349,7 @@ fn parse_function(head: &str, rest: &[&str]) -> Option<Function> {
         "CLOSE" => Function::ClosePane,
         "HELP" | "?" | "H" => Function::Help,
         "WEI" | "MARKETS" | "WORLD" => Function::Wei,
-        "GC" | "YCRV" | "CURVE" | "YC" => Function::Curve,
+        "EQ" | "EQUITY" | "GC" | "YCRV" | "CURVE" | "YC" => Function::Curve,
         "SECF" | "SEARCH" | "FIND" => Function::Search(joined()),
         "PORT" | "PORTFOLIO" | "PRTU" => Function::Portfolio(PortView::Summary, words().join(" ")),
         "ACCT" | "ACCOUNTS" | "ACCTS" | "BAL" | "BALANCES" => {
@@ -494,7 +494,7 @@ fn describe(f: &Function) -> String {
         Function::ClosePane => "Close focused pane".into(),
         Function::Help => "Help".into(),
         Function::Wei => "World markets overview".into(),
-        Function::Curve => "US Treasury yield curve".into(),
+        Function::Curve => "Paper account session equity curve".into(),
         Function::Search(q) => format!("Search securities: {q}"),
         Function::Portfolio(v, a) if a.is_empty() => match v {
             PortView::Summary => "Brokerage portfolio: value, cash, P&L and holdings (Moomoo OpenD)".into(),
