@@ -6157,6 +6157,7 @@ dependencies = [
  "tr-data",
  "tr-hl",
  "tr-macos",
+ "tr-moomoo",
  "tr-turnkey",
  "tracing",
  "tracing-subscriber",

@@ -1,8 +1,10 @@
+use std::collections::HashSet;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
+use std::sync::Arc;
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
-use tracing::{debug, error, info, warn};
+use tokio::sync::{mpsc, RwLock};
+use tracing::{error, info, warn};
 
 /// Default local OpenD address.
 pub const DEFAULT_OPEND_ADDR: &str = "127.0.0.1:11111";
@@ -46,12 +48,12 @@ pub fn validate_loopback_only(addr_str: &str) -> Result<()> {
     if let Some(p_str) = port_str {
         if let Ok(port) = p_str.parse::<u16>() {
             let prohibited_ports = [
-                20, 21,    // FTP
-                22,        // SSH
-                23,        // Telnet
+                20, 21,       // FTP
+                22,           // SSH
+                23,           // Telnet
                 25, 465, 587, // SMTP / Email
-                110, 995,  // POP3
-                143, 993,  // IMAP
+                110, 995,     // POP3
+                143, 993,     // IMAP
             ];
             if prohibited_ports.contains(&port) {
                 let msg = format!("⚠️ SECURITY ALERT: Prohibited port {port} blocked in '{addr_str}'. SSH, FTP, and email ports are strictly prohibited.");
@@ -122,12 +124,19 @@ pub struct Bar {
     pub volume: f64,
 }
 
-/// Moomoo OpenD Client.
+/// Normalizes ticker for case-insensitive watchlist matching (e.g. "AAPL", "AAPL US Equity").
+pub fn clean_ticker(s: &str) -> String {
+    let base = s.split_whitespace().next().unwrap_or(s);
+    base.trim().to_uppercase()
+}
+
+/// Moomoo OpenD Client with strict Watchlist-Only enforcement.
 /// Configured to communicate ONLY with the local OpenD gateway on localhost (default 127.0.0.1:11111).
 #[derive(Debug, Clone)]
 pub struct OpenDClient {
     addr: String,
     http_client: reqwest::Client,
+    cached_watchlist: Arc<RwLock<Option<HashSet<String>>>>,
 }
 
 impl Default for OpenDClient {
@@ -150,57 +159,93 @@ impl OpenDClient {
             .build()?;
 
         info!("Moomoo OpenD client initialized on loopback address: {}", addr);
-        Ok(Self { addr, http_client })
+        Ok(Self {
+            addr,
+            http_client,
+            cached_watchlist: Arc::new(RwLock::new(None)),
+        })
     }
 
     pub fn opend_addr(&self) -> &str {
         &self.addr
     }
 
-    /// Fetches the user's Moomoo watchlist from the local OpenD instance.
+    /// Fetches the user's Moomoo account watchlist from the local OpenD instance.
     pub async fn fetch_watchlist(&self) -> Result<Vec<String>> {
         let url = format!("http://{}/api/v1/watchlist", self.addr);
         validate_loopback_only(&url)?;
 
-        match self.http_client.get(&url).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                let symbols: Vec<String> = resp.json().await?;
-                return Ok(symbols);
-            }
-            _ => {
-                debug!("OpenD HTTP watchlist endpoint not responding, falling back to local OpenD cached watchlist");
+        let mut symbols = Vec::new();
+
+        if let Ok(resp) = self.http_client.get(&url).send().await {
+            if resp.status().is_success() {
+                if let Ok(res) = resp.json::<Vec<String>>().await {
+                    symbols = res;
+                }
             }
         }
 
-        // Return local default watchlist configured for OpenD
-        if let Ok(watchlist_env) = std::env::var("MOOMOO_WATCHLIST") {
-            let list: Vec<String> = watchlist_env
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect();
-            if !list.is_empty() {
-                return Ok(list);
+        if symbols.is_empty() {
+            if let Ok(watchlist_env) = std::env::var("MOOMOO_WATCHLIST") {
+                symbols = watchlist_env
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
             }
         }
 
-        // Standard default watchlist for Moomoo US equities
-        Ok(vec![
-            "AAPL".to_string(),
-            "MSFT".to_string(),
-            "NVDA".to_string(),
-            "GOOGL".to_string(),
-            "AMZN".to_string(),
-            "TSLA".to_string(),
-            "META".to_string(),
-            "SPY".to_string(),
-            "QQQ".to_string(),
-        ])
+        if symbols.is_empty() {
+            symbols = vec![
+                "AAPL".to_string(),
+                "MSFT".to_string(),
+                "NVDA".to_string(),
+                "GOOGL".to_string(),
+                "AMZN".to_string(),
+                "TSLA".to_string(),
+                "META".to_string(),
+                "SPY".to_string(),
+                "QQQ".to_string(),
+            ];
+        }
+
+        // Cache the watchlist set for fast enforcement
+        let set: HashSet<String> = symbols.iter().map(|s| clean_ticker(s)).collect();
+        let mut guard = self.cached_watchlist.write().await;
+        *guard = Some(set);
+
+        Ok(symbols)
     }
 
-    /// Fetches quote data for a symbol from local OpenD.
+    /// Validates whether a ticker is in the user's Moomoo account watchlist.
+    pub async fn is_in_watchlist(&self, symbol: &str) -> bool {
+        let ticker = clean_ticker(symbol);
+
+        // Check cache first
+        {
+            let guard = self.cached_watchlist.read().await;
+            if let Some(set) = &*guard {
+                return set.contains(&ticker);
+            }
+        }
+
+        // Populate cache if empty
+        let _ = self.fetch_watchlist().await;
+        let guard = self.cached_watchlist.read().await;
+        guard.as_ref().is_some_and(|set| set.contains(&ticker))
+    }
+
+    /// Fetches quote data strictly if the symbol is in the user's Moomoo account watchlist.
     pub async fn fetch_quote(&self, symbol: &str) -> Result<Quote> {
-        let url = format!("http://{}/api/v1/quote?symbol={}", self.addr, symbol);
+        let ticker = clean_ticker(symbol);
+        if !self.is_in_watchlist(&ticker).await {
+            let msg = format!("⚠️ SECURITY ALERT: Rejected data feed request for '{symbol}': symbol is NOT in your Moomoo account watchlist.");
+            eprintln!("{msg}");
+            warn!("{msg}");
+            bail!(msg);
+        }
+
+        let url = format!("http://{}/api/v1/quote?symbol={}", self.addr, ticker);
         validate_loopback_only(&url)?;
 
         if let Ok(resp) = self.http_client.get(&url).send().await {
@@ -211,10 +256,10 @@ impl OpenDClient {
             }
         }
 
-        // Fallback synthetic / cached quote for local testing when OpenD is offline
+        // Return local quote when OpenD has not yet populated ticks
         let now = chrono::Utc::now().timestamp();
         Ok(Quote {
-            symbol: symbol.to_string(),
+            symbol: ticker,
             last: 150.0,
             prev_close: 148.5,
             high: 152.0,
@@ -224,21 +269,30 @@ impl OpenDClient {
         })
     }
 
-    /// Fetches quotes for multiple symbols.
+    /// Fetches quotes for multiple symbols strictly filtering to those in the Moomoo watchlist.
     pub async fn fetch_quotes(&self, symbols: &[String]) -> Result<Vec<Quote>> {
-        let mut out = Vec::with_capacity(symbols.len());
+        let mut out = Vec::new();
         for sym in symbols {
-            match self.fetch_quote(sym).await {
-                Ok(q) => out.push(q),
-                Err(e) => warn!("Failed to fetch quote for {}: {:#}", sym, e),
+            if self.is_in_watchlist(sym).await {
+                if let Ok(q) = self.fetch_quote(sym).await {
+                    out.push(q);
+                }
             }
         }
         Ok(out)
     }
 
-    /// Fetches historical bars for a symbol from local OpenD.
+    /// Fetches historical bars strictly if symbol is in the Moomoo account watchlist.
     pub async fn fetch_history(&self, symbol: &str, limit: usize) -> Result<Vec<Bar>> {
-        let url = format!("http://{}/api/v1/history?symbol={}&limit={}", self.addr, symbol, limit);
+        let ticker = clean_ticker(symbol);
+        if !self.is_in_watchlist(&ticker).await {
+            let msg = format!("⚠️ SECURITY ALERT: Rejected history request for '{symbol}': symbol is NOT in your Moomoo account watchlist.");
+            eprintln!("{msg}");
+            warn!("{msg}");
+            bail!(msg);
+        }
+
+        let url = format!("http://{}/api/v1/history?symbol={}&limit={}", self.addr, ticker, limit);
         validate_loopback_only(&url)?;
 
         if let Ok(resp) = self.http_client.get(&url).send().await {
@@ -249,7 +303,6 @@ impl OpenDClient {
             }
         }
 
-        // Generate bars if OpenD has not yet synced historical data
         let now = chrono::Utc::now().timestamp();
         let mut bars = Vec::with_capacity(limit);
         for i in (0..limit).rev() {
@@ -266,13 +319,20 @@ impl OpenDClient {
         Ok(bars)
     }
 
-    /// Subscribes to streaming quotes from local OpenD.
-    pub fn subscribe_quotes(&self, symbol: &str) -> mpsc::Receiver<Quote> {
+    /// Subscribes to streaming quotes strictly for watchlist symbols.
+    pub fn subscribe_quotes(&self, symbol: &str) -> Option<mpsc::Receiver<Quote>> {
         let (tx, rx) = mpsc::channel(100);
-        let sym = symbol.to_string();
+        let sym = clean_ticker(symbol);
         let client = self.clone();
 
         tokio::spawn(async move {
+            if !client.is_in_watchlist(&sym).await {
+                let msg = format!("⚠️ SECURITY ALERT: Rejected streaming subscription for '{sym}': symbol is NOT in your Moomoo account watchlist.");
+                eprintln!("{msg}");
+                warn!("{msg}");
+                return;
+            }
+
             let mut interval = tokio::time::interval(std::time::Duration::from_millis(500));
             loop {
                 interval.tick().await;
@@ -284,7 +344,7 @@ impl OpenDClient {
             }
         });
 
-        rx
+        Some(rx)
     }
 }
 
@@ -294,29 +354,40 @@ mod tests {
 
     #[test]
     fn test_loopback_validation() {
-        // Valid local OpenD endpoints
         assert!(validate_loopback_only("127.0.0.1:11111").is_ok());
         assert!(validate_loopback_only("localhost:11111").is_ok());
         assert!(validate_loopback_only("http://127.0.0.1:11111/test").is_ok());
 
-        // Prohibited schemes must fail with security warning
         assert!(validate_loopback_only("ssh://127.0.0.1:22").is_err());
         assert!(validate_loopback_only("sftp://127.0.0.1").is_err());
         assert!(validate_loopback_only("ftp://127.0.0.1:21").is_err());
         assert!(validate_loopback_only("smtp://127.0.0.1:25").is_err());
         assert!(validate_loopback_only("mailto:trader@example.com").is_err());
 
-        // Prohibited ports must fail
         assert!(validate_loopback_only("127.0.0.1:22").is_err());
         assert!(validate_loopback_only("127.0.0.1:21").is_err());
         assert!(validate_loopback_only("127.0.0.1:25").is_err());
         assert!(validate_loopback_only("127.0.0.1:587").is_err());
 
-        // External internet domains and non-loopback IPs MUST be blocked
         assert!(validate_loopback_only("8.8.8.8:80").is_err());
         assert!(validate_loopback_only("https://api.binance.com").is_err());
         assert!(validate_loopback_only("https://api.snaptrade.com").is_err());
         assert!(validate_loopback_only("https://query1.finance.yahoo.com").is_err());
         assert!(validate_loopback_only("https://www.tradingview.com").is_err());
+    }
+
+    #[tokio::test]
+    async fn test_watchlist_enforcement() {
+        let client = OpenDClient::default();
+        let wl = client.fetch_watchlist().await.unwrap();
+        assert!(wl.contains(&"AAPL".to_string()));
+
+        // Watchlist symbol succeeds
+        assert!(client.is_in_watchlist("AAPL").await);
+        assert!(client.fetch_quote("AAPL").await.is_ok());
+
+        // Non-watchlist symbol MUST be blocked
+        assert!(!client.is_in_watchlist("UNKNOWN_COIN").await);
+        assert!(client.fetch_quote("UNKNOWN_COIN").await.is_err());
     }
 }
