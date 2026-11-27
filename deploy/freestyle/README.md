@@ -1,12 +1,8 @@
-# tr-gateway on Freestyle
+# tr-gateway on Freestyle (Optional Deployment)
 
-The Terminal data server runs on a Freestyle VM at **https://terminal-gateway.style.dev**. Clients connect to `wss://terminal-gateway.style.dev/ws`, for example the desktop app:
+> **Notice**: **MOOMOO-OPEND-TradeStation** runs directly on local **Moomoo OpenD (`127.0.0.1:11111`)**. Central Freestyle deployment is optional and is not needed for local OpenD operation.
 
-```sh
-TR_SERVER_URL=wss://terminal-gateway.style.dev cargo run --release
-```
-
-The desktop reads `TR_SERVER_URL` at startup, and the site's deploy workflow reads the repository variable of the same name (`server/README.md`), so moving to another domain changes no code.
+The Terminal data server can run on a Freestyle VM at **https://terminal-gateway.style.dev**.
 
 ## What runs where
 

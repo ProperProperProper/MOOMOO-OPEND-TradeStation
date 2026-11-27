@@ -1,6 +1,9 @@
-# TradingView chart UX study (REA, website mode)
+# Chart UX Study (Historical Notes)
 
-Behavioural research that informed terminal-rs's chart and terminal UX.
+> **Implementation Note for MOOMOO-OPEND-TradeStation**:
+> This folder documents visual chart behaviour and ergonomics studied for GPU rendering. All live market data feeds and streaming in **MOOMOO-OPEND-TradeStation** come strictly from your local **Moomoo OpenD gateway (`127.0.0.1:11111`)** on loopback. No connections to external chart servers are made.
+
+Behavioural research that informed chart and terminal UX.
 **Behaviour only**: no TradingView code, scripts, icons, fonts, images or other assets were copied
 into this repository. Screenshots were inspected in a scratch directory and are not committed.
 

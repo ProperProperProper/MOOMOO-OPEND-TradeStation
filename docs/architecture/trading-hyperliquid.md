@@ -1,6 +1,9 @@
-# Trading on Hyperliquid: design
+# Trading on Hyperliquid: design (Archived / Superseded)
 
-Status: **v1 built for testnet** (decisions in §15, as built in §16). Built-in Turnkey wallets replace the external-wallet and pasted-key flows (decided 2026-11-04, §4.5). Mainnet is not reachable from this build; it waits on §12.
+> **Architectural Transition Notice**: 
+> This repository (**MOOMOO-OPEND-TradeStation**) has been transitioned to exclusively use **local Moomoo OpenD (`127.0.0.1:11111`)** for all market data and watchlists. Hyperliquid network endpoints and external wallet flows have been disconnected in accordance with the project's zero-external-internet security policy. This document is retained for historical architectural reference only.
+
+Status: **Superseded by Moomoo OpenD Integration**
 Author: Grok Bot, for Micky; v1 by Claude. Research date: 2026-11-02 (read-only calls about 23:30 UTC). Times are UTC unless marked.
 
 Micky asked: *"i wanna enable crypto trading and stocks (via hyperliquid)"*. This doc designs order entry on Hyperliquid from Terminal's desktop app and the WASM web build. That covers crypto (core perps such as `BTC`, and spot such as `HYPE/USDC`) and the HIP-3 equity perps the terminal already shows (`xyz:AAPL`, labelled `PERP · HL xyz`). It fits the order entry that exists today: the demo account, the SnapTrade opt-in, the `PORT`/`POS`/`ORD`/`ACTV` panes and the order ticket.

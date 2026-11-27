@@ -1,4 +1,7 @@
-# Data streaming
+# Data Streaming (Historical Analysis)
+
+> **Notice for MOOMOO-OPEND-TradeStation**:
+> This document records external streaming patterns observed during reverse-engineering research. In **MOOMOO-OPEND-TradeStation**, all streaming is performed strictly over local **Moomoo OpenD (`127.0.0.1:11111`)** for instruments in the user's Moomoo account watchlist. External WebSockets are disabled.
 
 ## Observed (`ev_5888cfc1`)
 

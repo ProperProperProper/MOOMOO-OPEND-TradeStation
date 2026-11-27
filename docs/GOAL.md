@@ -1,32 +1,28 @@
-# Goal: terminal-rs, a Bloomberg-style trading terminal with congressional trades
+# Goal: MOOMOO-OPEND-TradeStation
 
-Build a fast, keyboard-driven market terminal: TradingView-level charting with a Bloomberg Terminal look (black background, amber/green monospace, dense tiled panels, a command line like `AAPL <GO>`).
+Build a fast, keyboard-driven market terminal in pure Rust: GPU charting with a Bloomberg Terminal look (black background, monospace numbers, dense tiled panels, a command line like `AAPL <GO>`), **dedicated exclusively to Moomoo account data via local OpenD**.
 
-## Research (REA)
-Use REA on tradingview.com (website mode) to study chart UX: interactions, drawing tools, indicators, layouts, hotkeys, data streaming. Notes go in docs/analysis/. Study behaviour only; never copy proprietary code or assets.
+## Security Hardening Mandates
+1. **Moomoo OpenD Only**: The application connects strictly to the local OpenD gateway (`127.0.0.1:11111`).
+2. **Watchlist-Only Feeds**: Market data, history, quotes, and streaming are strictly confined to instruments in the user's Moomoo account watchlist.
+3. **Loopback-Only Networking**: External non-loopback connections are blocked by the security firewall.
+4. **No Third-Party Logins**: Zero TradingView or broker login handlers.
+5. **No Email / Webhooks**: Zero email dispatching and zero webhooks. Notifications are 100% desktop/in-app toasts.
+6. **No SSH / FTP**: Remote management and file transfer protocols are strictly forbidden.
+7. **No Auto-Updater / Telemetry**: Auto-updater (Sparkle) and update commands are completely removed.
+8. **No Secrets in Repo**: Authentication is handled locally by OpenD; zero credentials committed.
 
-## Stack
-Pure Rust, fully native, no web frontend: wgpu for GPU chart rendering plus a fast immediate-mode UI (egui or custom), tokio for data ingest, rusqlite storage. It must be extremely snappy: sub-second cold start, 120 fps pan and zoom over 1M+ bars, and nothing that blocks the UI thread. Targets macOS first, then Linux.
-
-## Features
-1. Command-line navigation, tiling multi-panel layout, watchlists, hotkeys.
-2. Candles, volume, line and area charts; 1m to 1M timeframes; SMA, EMA, VWAP, RSI, MACD, Bollinger; trendline, horizontal and fib drawings; symbol compare.
-3. Market data behind a pluggable provider trait. Start with a free source (Alpaca free tier or Yahoo history), keys in env vars, and sample data when there is no key.
-4. Congress trades (key feature): ingest STOCK Act disclosures directly from official sources: Senate eFD (efdsearch.senate.gov) and House Clerk PTR filings (disclosures-clerk.house.gov), including PDF/XML parsing. Normalise politician, party, chamber, ticker, buy/sell, amount range, transaction date and filed date into SQLite, refreshed on a schedule.
-   - Panels: latest trades feed; politician profile (history, estimated performance); per-ticker list of who in Congress traded it.
-   - Chart overlay: B/S markers at transaction dates coloured by party, with a hover card and the disclosure lag.
-5. Alerts when a tracked politician files a new trade.
-
-## Quality
-Tests for the parsers and indicators, frame-time benchmarks, and a README noting it was built from reverse-engineering research. Make Conventional Commits as you go.
+## Architecture
+- **Pure Rust Stack**: Native wgpu GPU rendering, egui immediate-mode UI, tokio async engine, rusqlite local storage.
+- **Dedicated Crate**: `crates/moomoo` implements `OpenDClient` with built-in loopback and watchlist verification.
+- **Market Data Router**: `crates/data` feeds all quotes and history directly from `tr-moomoo`.
+- **In-App Notifications**: On-screen animated toasts deliver private notifications.
 
 ## Progress
-- [x] Command line, docking workspace (splits, tabs, drag and drop, pop-outs), saved layouts, link groups, rebindable hotkeys.
-- [x] wgpu charts: candles/bars/line/area, 1m–1M, SMA/EMA/VWAP/RSI/MACD/Bollinger, drawings, compare, log scale.
-- [x] Indicator library: 151 studies across moving averages, bands, momentum, trend, volatility, volume, statistics and pivots, from one registry driving the command line, `IND` picker, chart menu, help, panes/levels and saved layouts.
-- [x] Pluggable data providers (Yahoo, Binance/Coinbase, sample mode); multi-asset (equities, FX, crypto, rates, commodities, indices).
-- [x] Congress ingest from Senate eFD and House Clerk (PDF/XML), feed, politician profiles, per-ticker panel, chart markers with hover card, tracking alerts, freshness indicator.
-- [x] Native macOS look (unified toolbar, vibrancy sidebar on either side, SF fonts), options chains (OMON) with greeks.
-- [x] Theme system: built-in themes (Terminal Dark/Light, Bloomberg, High Contrast, Solarized, Nord, Monokai), live editor in Settings, custom themes as TOML files with TOML/JSON import/export, `THEME` command, ⌘⌥T cycling, optional theme per layout.
-- [x] Brokerage accounts through SnapTrade (read-only): setup screen, Keychain credential storage, Connection Portal, `PORT`/`ACCT`/`POS`/`ORD`/`ACTV` panes with live-repriced P&L.
-- [x] Tests for parsers, indicators, layouts, prefs, themes and the SnapTrade client; frame-time benchmarks; README.
+- [x] Command line, docking workspace, saved layouts, rebindable hotkeys.
+- [x] wgpu GPU charts: candles/bars/line/area, 1m–1M, drawings, 151 indicators.
+- [x] Moomoo OpenD integration (`crates/moomoo`).
+- [x] Loopback firewall with SSH/FTP/SMTP/webhook rejection.
+- [x] Watchlist-only data feed enforcement.
+- [x] Complete removal of auto-updater and telemetry.
+- [x] Pre-push security verification and GitHub repository rename to `MOOMOO-OPEND-TradeStation`.

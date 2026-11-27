@@ -1,6 +1,8 @@
-# Terminal data server: design
+# Terminal data server: design (Historical Reference)
 
-Status: **draft for review**. The first server code runs on an interim public feed (see [Interim: public feed](#interim-public-feed)).
+> **Notice**: **MOOMOO-OPEND-TradeStation** runs directly on local **Moomoo OpenD (`127.0.0.1:11111`)** on loopback with strict firewall controls. Central relay servers and external feeds have been superseded by direct local OpenD connectivity. This document is retained for historical architectural reference.
+
+Status: **Superseded by Local Moomoo OpenD Integration**
 Author: Grok Bot, for Micky. Research date: 2026-10-29. Times are UTC unless marked.
 
 Terminal today fetches all of its own data: Yahoo, Binance and Coinbase websockets, Treasury.gov, Senate eFD and the House Clerk, and SnapTrade. Each desktop process opens its own connections. The browser build serves sample data wherever a source blocks cross-origin requests (`TODO(web proxy)` in `crates/data/src/web.rs` and `crates/congress/src/db_web.rs`). This doc proposes the replacement Micky asked for: **one Rust server that every client (desktop, web, later mobile) connects to, so market data and user state sync in real time**. Hyperliquid is the first market-data source, and the design leaves a clean provider interface for licensed equities and options later.
