@@ -18,6 +18,7 @@ tr-data = { path = "crates/data" }
 tr-chart = { path = "crates/chart" }
 tr-macos = { path = "crates/macos" }
 tr-proto = { path = "crates/proto" }
+tr-moomoo = { path = "crates/moomoo" }
 anyhow = "1"
 thiserror = "2"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }

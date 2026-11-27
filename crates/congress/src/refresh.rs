@@ -2,9 +2,7 @@
 //! parse them, normalise into SQLite and raise alerts for tracked politicians.
 
 use std::future::Future;
-use std::time::Duration;
-
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 use chrono::{Datelike, NaiveDate, Utc};
 use futures::{StreamExt, stream};
 use tokio::sync::Mutex;
@@ -377,127 +375,34 @@ async fn refresh_senate<S: Source>(
 }
 
 /// Live source backed by the official websites.
-pub struct HttpSource {
-    client: reqwest::Client,
-    /// CSRF token of an agreed eFD session, established lazily.
-    senate_csrf: Mutex<Option<String>>,
-}
+#[derive(Default)]
+pub struct HttpSource;
 
 impl HttpSource {
     pub fn new() -> Result<Self> {
-        let client = reqwest::Client::builder()
-            .user_agent(concat!(
-                "terminal/",
-                env!("CARGO_PKG_VERSION"),
-                " (STOCK Act disclosure reader; +https://github.com/)"
-            ))
-            .cookie_store(true)
-            .timeout(Duration::from_secs(60))
-            .build()?;
-        Ok(Self { client, senate_csrf: Mutex::new(None) })
-    }
-
-    async fn get_bytes(&self, url: &str) -> Result<Vec<u8>> {
-        let resp = self.client.get(url).send().await?;
-        if !resp.status().is_success() {
-            bail!("GET {url}: HTTP {}", resp.status());
-        }
-        Ok(resp.bytes().await?.to_vec())
-    }
-
-    /// Accept the eFD prohibition agreement and return the session CSRF token.
-    async fn senate_session(&self, force: bool) -> Result<String> {
-        let mut guard = self.senate_csrf.lock().await;
-        if let (Some(tok), false) = (guard.as_ref(), force) {
-            return Ok(tok.clone());
-        }
-        let home = self.client.get(senate::HOME_URL).send().await?.text().await?;
-        let form_tok = senate::csrf_from_form(&home).ok_or_else(|| anyhow!("no CSRF token on eFD home page"))?;
-        let resp = self
-            .client
-            .post(senate::HOME_URL)
-            .header("Referer", senate::HOME_URL)
-            .form(&[("prohibition_agreement", "1"), ("csrfmiddlewaretoken", form_tok.as_str())])
-            .send()
-            .await?;
-        if !resp.status().is_success() {
-            bail!("eFD agreement POST: HTTP {}", resp.status());
-        }
-        // After agreeing, the search page carries a fresh form token tied to the csrftoken cookie.
-        let page = resp.text().await?;
-        let tok = senate::csrf_from_form(&page).unwrap_or(form_tok);
-        *guard = Some(tok.clone());
-        Ok(tok)
-    }
-
-    async fn senate_page(&self, csrf: &str, start: u64, since: Option<NaiveDate>) -> Result<senate::SearchPage> {
-        let resp = self
-            .client
-            .post(senate::DATA_URL)
-            .header("Referer", senate::SEARCH_URL)
-            .header("X-CSRFToken", csrf)
-            .form(&senate::search_form(csrf, start, 100, since))
-            .send()
-            .await?;
-        if !resp.status().is_success() {
-            bail!("eFD search: HTTP {}", resp.status());
-        }
-        senate::parse_search_json(&resp.text().await?)
+        Ok(Self)
     }
 }
 
 impl Source for HttpSource {
     async fn rosters(&self) -> Result<Roster> {
-        let house = String::from_utf8_lossy(&self.get_bytes(roster::HOUSE_ROSTER_URL).await?).into_owned();
-        let senate = String::from_utf8_lossy(&self.get_bytes(roster::SENATE_ROSTER_URL).await?).into_owned();
-        Ok(Roster::new(roster::parse_house_roster(&house)?, roster::parse_senate_roster(&senate)?))
+        // Disabled external network requests: application is restricted to local OpenD only.
+        Ok(Roster::default())
     }
 
-    async fn house_index(&self, year: i32) -> Result<Vec<IndexEntry>> {
-        let zip = self.get_bytes(&house::index_zip_url(year)).await?;
-        tokio::task::spawn_blocking(move || house::parse_index_zip(&zip)).await?
+    async fn house_index(&self, _year: i32) -> Result<Vec<IndexEntry>> {
+        Ok(Vec::new())
     }
 
-    async fn house_pdf(&self, entry: &IndexEntry) -> Result<Vec<u8>> {
-        self.get_bytes(&entry.pdf_url()).await
+    async fn house_pdf(&self, _entry: &IndexEntry) -> Result<Vec<u8>> {
+        bail!("External PDF downloading disabled")
     }
 
-    async fn senate_reports(&self, since: Option<NaiveDate>) -> Result<Vec<ReportRef>> {
-        let mut csrf = self.senate_session(false).await?;
-        let mut out = Vec::new();
-        let mut start = 0;
-        loop {
-            let page = match self.senate_page(&csrf, start, since).await {
-                Ok(p) => p,
-                // Session expired: agree again once and retry.
-                Err(_) if start == 0 || out.is_empty() => {
-                    csrf = self.senate_session(true).await?;
-                    self.senate_page(&csrf, start, since).await?
-                }
-                Err(e) => return Err(e),
-            };
-            let n = page.reports.len() as u64;
-            out.extend(page.reports);
-            start += n;
-            if n == 0 || start >= page.total {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(300)).await;
-        }
-        Ok(out)
+    async fn senate_reports(&self, _since: Option<NaiveDate>) -> Result<Vec<ReportRef>> {
+        Ok(Vec::new())
     }
 
-    async fn senate_ptr(&self, report: &ReportRef) -> Result<String> {
-        self.senate_session(false).await?;
-        let resp = self.client.get(&report.url).header("Referer", senate::SEARCH_URL).send().await?;
-        let final_url = resp.url().to_string();
-        let text = resp.text().await?;
-        // An expired session bounces to the agreement page.
-        if final_url.contains("/search/home") || !text.contains("Transaction Date") {
-            self.senate_session(true).await?;
-            let resp = self.client.get(&report.url).header("Referer", senate::SEARCH_URL).send().await?;
-            return Ok(resp.text().await?);
-        }
-        Ok(text)
+    async fn senate_ptr(&self, _report: &ReportRef) -> Result<String> {
+        bail!("External Senate scraping disabled")
     }
 }

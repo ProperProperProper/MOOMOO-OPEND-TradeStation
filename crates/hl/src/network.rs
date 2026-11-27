@@ -8,10 +8,10 @@
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-/// Testnet REST base (`/info`, `/exchange`).
-pub const API_URL: &str = "https://api.hyperliquid-testnet.xyz";
-/// Testnet websocket.
-pub const WS_URL: &str = "wss://api.hyperliquid-testnet.xyz/ws";
+/// Restricted to local OpenD / loopback only.
+pub const API_URL: &str = "http://127.0.0.1:11111";
+/// Local loopback websocket only.
+pub const WS_URL: &str = "ws://127.0.0.1:11111/ws";
 /// The chain id user-signed actions are signed under (as the Python SDK does). It only
 /// names the EIP-712 domain the wallet signs in; `hyperliquidChain` picks the network.
 pub const SIGNATURE_CHAIN_ID: u64 = 0x66eee;

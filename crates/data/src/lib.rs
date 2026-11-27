@@ -460,25 +460,14 @@ pub fn from_env() -> Provider {
     if var("TR_PROVIDER").is_some_and(|p| p.eq_ignore_ascii_case("sample")) {
         return Arc::new(sample::SampleProvider::default().with_live_ticks());
     }
-    let alpaca = match (var("APCA_API_KEY_ID"), var("APCA_API_SECRET_KEY")) {
-        (Some(key), Some(secret)) => {
-            let feed = var("APCA_DATA_FEED").unwrap_or_else(|| "iex".into());
-            alpaca::AlpacaProvider::new(key, secret, feed).map_err(|e| tracing::warn!("alpaca init failed: {e:#}")).ok()
-        }
-        _ => None,
-    };
-    let markets = match markets::Markets::new(alpaca) {
+    let markets = match markets::Markets::new() {
         Ok(m) => Fallback::new(m),
-        Err(_) => return Arc::new(sample::SampleProvider::default().with_live_ticks()),
-    };
-    match var("TR_SERVER_URL") {
-        Some(url) => {
-            // The URL itself stays out of the logs.
-            tracing::info!("TR_SERVER_URL is set: crypto markets come through the Terminal server");
-            Arc::new(remote::RemoteMarkets::new(url.trim(), markets))
+        Err(e) => {
+            tracing::warn!("Moomoo OpenD init failed, using sample data: {e:#}");
+            return Arc::new(sample::SampleProvider::default().with_live_ticks());
         }
-        None => Arc::new(markets),
-    }
+    };
+    Arc::new(markets)
 }
 
 /// The browser build's provider: sample data only when `offline`, otherwise live crypto

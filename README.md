@@ -178,13 +178,26 @@ gets the native title bar with traffic lights, window vibrancy behind the sideba
   Settings › Hotkeys and Help (click a binding, press the new keys); defaults for new charts and
   order books; everything persists in `prefs.json`.
 
-## Running
+## Running with Moomoo OpenD
 
+The application is configured to connect **exclusively to your local Moomoo OpenD gateway** on localhost (`127.0.0.1:11111`). All external internet connections are blocked for maximum privacy and security.
+
+### 1. Launch Moomoo OpenD
+Start your local OpenD client (or Moomoo desktop app with External Access enabled):
+- Default host/port: `127.0.0.1:11111`
+- OpenD manages authentication locally; **no sensitive account passwords or API secret keys are ever stored in the repository**.
+
+### 2. Run the Terminal
 ```sh
-cargo run --release                  # Yahoo data, congress ingest in the background
-TR_PROVIDER=sample cargo run --release   # offline
-APCA_API_KEY_ID=… APCA_API_SECRET_KEY=… cargo run --release   # Alpaca
+cargo run --release                          # Connects to local Moomoo OpenD (127.0.0.1:11111)
+MOOMOO_OPEND_ADDR=127.0.0.1:11111 cargo run  # Optional custom OpenD port/address
+TR_PROVIDER=sample cargo run --release       # Fully offline sample mode
 ```
+
+### Security & Privacy Guarantee
+- **Loopback-Only Enforced**: All socket and HTTP clients reject non-loopback connections.
+- **Zero Third-Party Calls**: External providers (Yahoo, Binance, Alpaca, Coinbase, Treasury scrapers) are disabled.
+- **Zero Secrets in Git**: No account tokens or credentials are stored or pushed to git.
 
 Data lives in `~/Library/Application Support/terminal` (macOS) or
 `$XDG_DATA_HOME/terminal` (Linux), or `TR_DATA_DIR`. Versions from before the project was renamed

@@ -19,8 +19,8 @@ use serde_json::{Value, json};
 
 use crate::session::Session;
 
-/// Turnkey's API.
-pub const API_URL: &str = "https://api.turnkey.com";
+/// Turnkey API restricted to local loopback only.
+pub const API_URL: &str = "http://127.0.0.1:11111";
 /// The longest any one request may take, on the desktop and in the browser.
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 /// The wallet account Terminal uses: the first Ethereum account, as the sign-up creates it.

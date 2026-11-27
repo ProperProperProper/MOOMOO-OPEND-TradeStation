@@ -261,11 +261,15 @@ impl SnapTrade {
         if !creds.has_keys() {
             bail!("SnapTrade client ID and consumer key are not set");
         }
+        let base = Url::parse(base.trim_end_matches('/')).context("invalid SnapTrade base URL")?;
+        let host = base.host_str().unwrap_or("");
+        if !host.eq_ignore_ascii_case("localhost") && !host.eq_ignore_ascii_case("127.0.0.1") && !host.eq_ignore_ascii_case("::1") {
+            bail!("SECURITY VIOLATION: External SnapTrade network connections are disabled. The application only communicates with local Moomoo OpenD.");
+        }
         let http = reqwest::Client::builder()
             .user_agent(concat!("terminal/", env!("CARGO_PKG_VERSION")))
             .timeout(Duration::from_secs(30))
             .build()?;
-        let base = Url::parse(base.trim_end_matches('/')).context("invalid SnapTrade base URL")?;
         Ok(Self { http, base, creds })
     }
 

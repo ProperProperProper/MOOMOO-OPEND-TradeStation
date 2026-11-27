@@ -410,18 +410,16 @@ fn default_true() -> bool {
     true
 }
 
-const DEFAULT_WATCHLIST: [&str; 11] = [
-    "SPX Index",
+const DEFAULT_WATCHLIST: [&str; 9] = [
     "AAPL US Equity",
+    "MSFT US Equity",
     "NVDA US Equity",
+    "GOOGL US Equity",
+    "AMZN US Equity",
+    "TSLA US Equity",
+    "META US Equity",
     "SPY US Equity",
-    "BTCUSD Curncy",
-    "ETHUSD Curncy",
-    "EURUSD Curncy",
-    "USDJPY Curncy",
-    "US10Y Govt",
-    "CL1 Comdty",
-    "GC1 Comdty",
+    "QQQ US Equity",
 ];
 
 /// Convert a pre-docking settings file into a layout document.
