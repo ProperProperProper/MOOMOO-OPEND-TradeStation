@@ -255,6 +255,11 @@ impl OpenDProtoSession {
         let mut bars = Vec::new();
         if let Some(list) = res.pointer("/s2c/klList").and_then(|v| v.as_array()) {
             for item in list {
+                // Drop blank or junk candles flagged by OpenD (ANT-TRADER method)
+                if item.get("isBlank").and_then(|v| v.as_bool()).unwrap_or(false) {
+                    continue;
+                }
+
                 let ts = item.get("timestamp")
                     .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
                     .or_else(|| {
@@ -274,9 +279,21 @@ impl OpenDProtoSession {
                     .and_then(|v| v.as_f64().or_else(|| v.as_str().and_then(|s| s.parse::<f64>().ok())))
                     .unwrap_or(0.0);
 
-                if ts > 0 && open > 0.0 {
-                    bars.push(crate::Bar { ts, open, high, low, close, volume });
+                // Validation matching NASDAQ-US-ANT-TRADER:
+                // 1. Positive prices
+                if ts <= 0 || open <= 0.0 || high <= 0.0 || low <= 0.0 || close <= 0.0 {
+                    continue;
                 }
+                // 2. OHLC sanity: high must be the highest, low must be the lowest
+                if high < low || high < open.max(close) || low > open.min(close) {
+                    continue;
+                }
+                // 3. Drop stale phantom candles (zero volume with flat zero-range price)
+                if volume <= 0.0 && (high - low).abs() < 1e-6 && (open - close).abs() < 1e-6 {
+                    continue;
+                }
+
+                bars.push(crate::Bar { ts, open, high, low, close, volume });
             }
         }
         bars.sort_by_key(|b| b.ts);

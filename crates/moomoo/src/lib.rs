@@ -255,9 +255,15 @@ impl OpenDClient {
 
         if symbols.is_empty() {
             symbols = vec![
+                "MRNA".to_string(),
+                "ANT".to_string(),
+                "NVDA".to_string(),
+                "MU".to_string(),
+                "SNDK".to_string(),
+                "OMH".to_string(),
+                "APP".to_string(),
                 "AAPL".to_string(),
                 "MSFT".to_string(),
-                "NVDA".to_string(),
                 "GOOGL".to_string(),
                 "AMZN".to_string(),
                 "TSLA".to_string(),
