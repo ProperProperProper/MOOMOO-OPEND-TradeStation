@@ -28,12 +28,12 @@ out="${1:-site/static/app}"
 target=wasm32-unknown-unknown
 wasm="${CARGO_TARGET_DIR:-target}/$target/web/terminal.wasm"
 
-export TR_SERVER_URL="${TR_SERVER_URL-wss://terminal-gateway.style.dev/ws}"
+export TR_SERVER_URL="${TR_SERVER_URL-}"
 case "$TR_SERVER_URL" in
-"") echo "no Terminal server: crypto markets come from Binance and Coinbase" ;;
+"") echo "local mode: data comes from local Moomoo OpenD gateway" ;;
 ws://* | wss://*) echo "Terminal server: $TR_SERVER_URL" ;;
 *)
-	echo "TR_SERVER_URL must be a ws:// or wss:// URL, or empty for no server" >&2
+	echo "TR_SERVER_URL must be a ws:// or wss:// URL, or empty for local mode" >&2
 	exit 1
 	;;
 esac
