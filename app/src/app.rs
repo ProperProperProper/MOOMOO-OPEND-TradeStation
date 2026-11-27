@@ -707,11 +707,23 @@ impl TerminalApp {
             palette: crate::palette::Palette::load(&data_dir().join("palette.json")),
         };
         let mut doc = None;
+        let valid_keys: Vec<String> = DEFAULT_WATCHLIST.map(|w| tr_data::security(w).key()).to_vec();
         if let Some(s) = &settings {
             if !s.watchlist.is_empty() {
-                // Older settings stored bare tickers; normalise to market keys.
-                app.watchlist = s.watchlist.iter().map(|w| tr_data::security(w).key()).collect();
-                app.watchlist.dedup();
+                // Retain only symbols that match the active Moomoo MooComp watchlist
+                let mut filtered: Vec<String> = s
+                    .watchlist
+                    .iter()
+                    .map(|w| tr_data::security(w).key())
+                    .filter(|k| valid_keys.contains(k))
+                    .collect();
+                filtered.dedup();
+                for k in &valid_keys {
+                    if !filtered.contains(k) {
+                        filtered.push(k.clone());
+                    }
+                }
+                app.watchlist = filtered;
             }
             app.sidebar_open = s.sidebar;
             if let Some(name) = &s.active_layout {
