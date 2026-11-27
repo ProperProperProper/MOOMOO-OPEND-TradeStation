@@ -548,8 +548,8 @@ fn describe(f: &Function) -> String {
             }
             s
         }
-        Function::AccountMode(false) => "Switch to the DEMO account (paper trading)".into(),
-        Function::AccountMode(true) => "Switch to LIVE brokerage accounts (asks first)".into(),
+        Function::AccountMode(false) => "Switch to Moomoo PAPER account (simulated trading via OpenD)".into(),
+        Function::AccountMode(true) => "Switch to Moomoo LIVE accounts (asks first)".into(),
         Function::Kill => {
             "Kill switch: cancel every open Hyperliquid testnet order, then turn Hyperliquid orders off".into()
         }

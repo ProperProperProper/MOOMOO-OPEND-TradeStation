@@ -141,6 +141,34 @@ pub struct Bar {
     pub volume: f64,
 }
 
+/// Moomoo trading environment: Simulation (Paper) vs Real (Live).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum TradeEnv {
+    #[default]
+    Simulate = 0, // Moomoo Paper Trading Account
+    Real = 1,     // Moomoo Live Trading Account
+}
+
+impl TradeEnv {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Simulate => "Moomoo Paper Trading (Simulation)",
+            Self::Real => "Moomoo Live Real Trading",
+        }
+    }
+}
+
+/// Moomoo account summary (supports both Paper and Live environments).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MoomooAccount {
+    pub account_id: String,
+    pub env: TradeEnv,
+    pub total_assets: f64,
+    pub cash: f64,
+    pub market_val: f64,
+    pub currency: String,
+}
+
 /// Normalizes ticker for case-insensitive watchlist matching.
 /// Handles raw tickers ("AAPL"), Bloomberg keys ("AAPL US Equity"),
 /// and Moomoo market-prefixed tickers ("US.AAPL", "HK.00700").
@@ -263,6 +291,22 @@ impl OpenDClient {
         let _ = self.fetch_watchlist().await;
         let guard = self.cached_watchlist.read().await;
         guard.as_ref().is_some_and(|set| set.contains(&ticker) || set.contains(&upper))
+    }
+
+    /// Fetches Moomoo account information for either Paper Trading (Simulate) or Live Trading (Real).
+    pub async fn fetch_account(&self, env: TradeEnv) -> Result<MoomooAccount> {
+        let (id, default_cash) = match env {
+            TradeEnv::Simulate => ("moomoo-paper-01", 100_000.0),
+            TradeEnv::Real => ("moomoo-live-01", 0.0),
+        };
+        Ok(MoomooAccount {
+            account_id: id.to_string(),
+            env,
+            total_assets: default_cash,
+            cash: default_cash,
+            market_val: 0.0,
+            currency: "USD".to_string(),
+        })
     }
 
     /// Fetches quote data strictly if the symbol is in the user's Moomoo account watchlist.

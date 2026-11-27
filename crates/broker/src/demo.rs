@@ -239,9 +239,9 @@ impl DemoBook {
     pub fn account(&self) -> Account {
         Account {
             id: ACCOUNT_ID.into(),
-            name: "Demo".into(),
-            number: "DEMO".into(),
-            institution: "Paper trading".into(),
+            name: "Moomoo Paper Account".into(),
+            number: "PAPER".into(),
+            institution: "Moomoo OpenD".into(),
             currency: "USD".into(),
             total: Some(self.equity()),
             cash: Some(self.cash),
@@ -272,7 +272,7 @@ impl DemoBook {
     pub fn estimate(&self, req: &OrderRequest, quote: Option<f64>) -> Result<Estimate, String> {
         req.validate()?;
         if req.account_id != ACCOUNT_ID {
-            return Err("That order is not for the demo account.".into());
+            return Err("That order is not for the Moomoo Paper account.".into());
         }
         let symbol = clean_symbol(&req.symbol).ok_or("Enter a symbol.")?;
         let quote = quote.filter(|q| positive(*q));

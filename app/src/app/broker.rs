@@ -501,7 +501,7 @@ impl TerminalApp {
         let note = |ui: &mut egui::Ui, s: &str| {
             ui.label(RichText::new(s).font(ui_font(11.5)).color(muted()));
         };
-        let mode = self.broker.mode();
+        let _mode = self.broker.mode();
         let access_note = self.brokerage_access_note();
         // ---- Moomoo OpenD Status Card ----
         ui.add_space(dp(4.0));

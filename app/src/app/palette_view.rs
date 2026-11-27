@@ -153,24 +153,24 @@ pub(super) fn static_items() -> Vec<Item> {
     v.push(
         Item::new(
             Kind::Action,
-            "Switch to the demo account",
-            "DEMO · paper trading, virtual cash",
+            "Switch to Moomoo Paper Account",
+            "PAPER · Moomoo OpenD simulated trading",
             Target::Run("DEMO".into()),
         )
-        .keywords("paper practice simulated trading account mode"),
+        .keywords("paper moomoo opend practice simulated trading account mode"),
     );
     v.push(
         Item::new(
             Kind::Action,
-            "Switch to live accounts",
-            "MODE LIVE · real brokerage accounts (asks first)",
+            "Switch to Live Moomoo Accounts",
+            "MODE LIVE · real Moomoo accounts (asks first)",
             Target::Run("MODE LIVE".into()),
         )
-        .keywords("real money brokerage snaptrade trading account mode"),
+        .keywords("real money moomoo opend trading account mode"),
     );
     v.push(
-        Item::new(Kind::Action, "Reset the demo account", "Settings › Trading", Target::Settings("Trading".into()))
-            .keywords("paper demo restart cash"),
+        Item::new(Kind::Action, "Reset Moomoo Paper Account", "Settings › Trading", Target::Settings("Trading".into()))
+            .keywords("paper moomoo demo restart cash"),
     );
     for &(a, words) in ACTIONS {
         v.push(Item::new(Kind::Action, a.label(), a.category(), Target::Hotkey(a)).keywords(words).hotkey(a));

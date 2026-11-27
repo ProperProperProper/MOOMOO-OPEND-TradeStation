@@ -113,7 +113,7 @@ impl TerminalApp {
 
         // Which account trades: DEMO (paper) or LIVE (real money, in red). Click to switch.
         let live_mode = !self.demo_mode();
-        let (label, fill) = if live_mode { ("LIVE", theme::down()) } else { ("DEMO", theme::accent()) };
+        let (label, fill) = if live_mode { ("LIVE", theme::down()) } else { ("PAPER", theme::accent()) };
         let badge_text = p.layout_no_wrap(label.into(), mono(11.0), Color32::WHITE);
         let badge = Rect::from_min_size(pos2(x, cy - 10.0), vec2(badge_text.size().x + 18.0, 20.0));
         let resp = ui.interact(badge, Id::new("account-mode-badge"), Sense::click());
@@ -121,16 +121,16 @@ impl TerminalApp {
         p.rect_filled(badge, 10.0, fill);
         p.galley(badge.center() - badge_text.size() / 2.0, badge_text, Color32::WHITE);
         let tip = if live_mode {
-            "LIVE: portfolio panes and orders use your real brokerage accounts. Click to switch to the demo account."
+            "LIVE: Moomoo Live Trading Account. Click to switch to Moomoo Paper Trading Account."
         } else {
-            "DEMO: paper trading with virtual cash. Click to switch to your live brokerage accounts."
+            "PAPER: Moomoo Paper Trading Account (simulated trading via OpenD). Click to switch to Moomoo Live Accounts."
         };
         if resp.on_hover_text(tip).clicked() {
             let next = if live_mode { crate::prefs::AccountMode::Demo } else { crate::prefs::AccountMode::Live };
             self.set_account_mode(next, false);
         }
         if live_mode {
-            // A red rule along the toolbar so live mode is never mistaken for the demo.
+            // A red rule along the toolbar so live mode is never mistaken for the paper account.
             p.hline(rect.x_range(), rect.bottom() - 1.0, Stroke::new(2.0, theme::down()));
         }
         x = badge.right() + 10.0;

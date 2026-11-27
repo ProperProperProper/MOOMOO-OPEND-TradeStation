@@ -1700,7 +1700,7 @@ impl TerminalApp {
         }
     }
 
-    /// Confirm switching from the demo account to live accounts.
+    /// Confirm switching from the Moomoo Paper account to live Moomoo accounts.
     fn live_dialog(&mut self, ctx: &egui::Context) {
         let mut choice = None;
         let enabled = self.trading_enabled();
@@ -1708,23 +1708,23 @@ impl TerminalApp {
             ui.set_width(dp(400.0));
             ui.horizontal(|ui| {
                 mode_badge(ui, true);
-                ui.label(RichText::new("Switch to your live accounts?").font(ui_font(16.0)).strong());
+                ui.label(RichText::new("Switch to your Live Moomoo accounts?").font(ui_font(16.0)).strong());
             });
             ui.add_space(dp(4.0));
             for line in [
-                "Portfolio panes and the order ticket will use your real brokerage accounts (SnapTrade) instead of the demo account.",
+                "Portfolio panes and the order ticket will use your real Moomoo accounts instead of the Moomoo Paper account.",
                 if enabled {
-                    "Live orders are enabled: confirmed orders are sent to your broker with real money."
+                    "Live orders are enabled: confirmed orders are sent to your Moomoo OpenD gateway with real money."
                 } else {
                     "Live orders stay off until you enable them in Settings › Trading; until then you can only view."
                 },
-                "This choice is remembered. Switch back to DEMO any time from the toolbar badge.",
+                "This choice is remembered. Switch back to PAPER any time from the toolbar badge.",
             ] {
                 ui.label(RichText::new(format!("• {line}")).font(ui_font(12.0)).color(text()));
             }
             ui.add_space(dp(6.0));
             ui.horizontal(|ui| {
-                if ui.button("Stay in Demo").clicked() {
+                if ui.button("Stay in Paper Account").clicked() {
                     choice = Some(false);
                 }
                 if ui.add(filled("Switch to LIVE", theme::down(), true)).clicked() {
@@ -1774,9 +1774,9 @@ impl TerminalApp {
             mode_badge(ui, !demo_mode);
             ui.label(
                 RichText::new(if demo_mode {
-                    "Demo account: paper trading with virtual cash."
+                    "Moomoo Paper Account: simulated trading via Moomoo OpenD paper environment."
                 } else {
-                    "Live accounts: your real brokerage accounts through SnapTrade."
+                    "Moomoo Live Accounts: your real brokerage accounts through Moomoo OpenD."
                 })
                 .font(ui_font(12.5))
                 .color(text()),
@@ -1784,16 +1784,16 @@ impl TerminalApp {
         });
         ui.horizontal(|ui| {
             if demo_mode {
-                if ui.button(RichText::new("Switch to Live Accounts…").color(theme::down())).clicked() {
+                if ui.button(RichText::new("Switch to Live Moomoo Accounts…").color(theme::down())).clicked() {
                     self.set_account_mode(AccountMode::Live, false);
                 }
-            } else if ui.button("Switch to Demo Account").clicked() {
+            } else if ui.button("Switch to Moomoo Paper Account").clicked() {
                 self.set_account_mode(AccountMode::Demo, false);
             }
         });
         note(ui, "The toolbar badge shows which account is active; click it to switch.");
 
-        section(ui, "Demo account");
+        section(ui, "Moomoo Paper account");
         let b = &self.demo.book;
         let equity = b.equity();
         let pnl = equity - b.starting_cash;
@@ -1823,7 +1823,7 @@ impl TerminalApp {
                         .speed(1000.0)
                         .prefix("$"),
                 );
-                if ui.add(filled("Reset Demo Account", theme::down(), true)).clicked() {
+                if ui.add(filled("Reset Moomoo Paper Account", theme::down(), true)).clicked() {
                     let cash = self.demo.reset_cash;
                     self.reset_demo(cash);
                 }
@@ -1831,8 +1831,8 @@ impl TerminalApp {
                     self.demo.confirm_reset = false;
                 }
             } else if ui
-                .button("Reset Demo Account…")
-                .on_hover_text("Clear demo positions, orders and history and start again with virtual cash")
+                .button("Reset Moomoo Paper Account…")
+                .on_hover_text("Clear paper positions, orders and history and start again with virtual cash")
                 .clicked()
             {
                 self.demo.confirm_reset = true;
@@ -1840,11 +1840,11 @@ impl TerminalApp {
             }
         });
         if self.demo.confirm_reset {
-            note(ui, "Positions, orders and history in the demo account are deleted. Live accounts are not affected.");
+            note(ui, "Positions, orders and history in the paper account are deleted. Live accounts are not affected.");
         }
         if let Some(e) = &self.demo.save_error {
             ui.label(
-                RichText::new(format!("Could not save the demo account: {e}. Retrying every few seconds."))
+                RichText::new(format!("Could not save the paper account: {e}. Retrying every few seconds."))
                     .font(ui_font(12.0))
                     .color(theme::down()),
             );
@@ -2062,9 +2062,9 @@ fn filled(label: &str, fill: Color32, enabled: bool) -> egui::Button<'static> {
     }
 }
 
-/// The DEMO / LIVE pill.
+/// The PAPER / LIVE pill.
 pub fn mode_badge(ui: &mut Ui, live: bool) -> egui::Response {
-    let (label, fill) = if live { ("LIVE", theme::down()) } else { ("DEMO", theme::accent()) };
+    let (label, fill) = if live { ("LIVE", theme::down()) } else { ("PAPER", theme::accent()) };
     ui.add(
         egui::Button::new(RichText::new(label).font(mono(11.0)).strong().color(Color32::WHITE))
             .fill(fill)

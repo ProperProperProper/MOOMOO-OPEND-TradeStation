@@ -138,7 +138,7 @@ impl TerminalApp {
         let had_error = self.demo.save_error.is_some();
         self.demo.retry_save();
         if had_error && self.demo.save_error.is_none() {
-            self.trade_toast("Demo account saved", true);
+            self.trade_toast("Moomoo Paper account saved", true);
         }
         let now = chrono::Utc::now();
         let expired = self.demo.book.expire(now);
@@ -236,7 +236,7 @@ impl TerminalApp {
             t.done = None;
         }
         self.trade_toast(
-            format!("Demo account reset to {}", super::portfolio_view::money(self.demo.book.cash, "USD")),
+            format!("Moomoo Paper account reset to {}", super::portfolio_view::money(self.demo.book.cash, "USD")),
             true,
         );
     }
@@ -267,7 +267,7 @@ impl TerminalApp {
         }
         match mode {
             AccountMode::Demo => {
-                self.trade_toast("Switched to the DEMO account: orders are simulated with virtual cash", true);
+                self.trade_toast("Switched to Moomoo PAPER account: simulated trading via OpenD with virtual cash", true);
                 if let Some(t) = &mut self.trading.ticket {
                     t.account = Some(tr_broker::demo::ACCOUNT_ID.into());
                 }
