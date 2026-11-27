@@ -31,13 +31,7 @@ fn timeframe(tf: Timeframe) -> &'static str {
     match tf {
         Timeframe::M1 => "1Min",
         Timeframe::M5 => "5Min",
-        Timeframe::M15 => "15Min",
-        Timeframe::M30 => "30Min",
-        Timeframe::H1 => "1Hour",
-        Timeframe::H4 => "4Hour",
-        Timeframe::D1 => "1Day",
-        Timeframe::W1 => "1Week",
-        Timeframe::MN1 => "1Month",
+        _ => "1Min",
     }
 }
 

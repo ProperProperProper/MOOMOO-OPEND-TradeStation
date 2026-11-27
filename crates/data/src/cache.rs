@@ -79,6 +79,6 @@ mod tests {
         assert_eq!(got.len(), 10);
         assert_eq!(got[0].ts, 40 * 60);
         assert_eq!(got[9].close, 2.5);
-        assert!(c.load("AAPL", Timeframe::D1, 10).unwrap().is_empty());
+        assert!(c.load("AAPL", Timeframe::M5, 10).unwrap().is_empty());
     }
 }

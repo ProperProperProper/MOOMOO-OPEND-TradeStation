@@ -43,14 +43,9 @@ pub fn coinbase_product(sec: &Security) -> String {
 pub fn binance_interval(tf: Timeframe) -> &'static str {
     match tf {
         Timeframe::M1 => "1m",
+        Timeframe::M3 => "3m",
         Timeframe::M5 => "5m",
-        Timeframe::M15 => "15m",
-        Timeframe::M30 => "30m",
-        Timeframe::H1 => "1h",
-        Timeframe::H4 => "4h",
-        Timeframe::D1 => "1d",
-        Timeframe::W1 => "1w",
-        Timeframe::MN1 => "1M",
+        _ => "1m",
     }
 }
 
@@ -128,13 +123,7 @@ pub fn parse_coinbase_ws(text: &str) -> Option<(i64, f64, f64)> {
 fn coinbase_granularity(tf: Timeframe) -> (i64, bool) {
     match tf {
         Timeframe::M1 => (60, false),
-        Timeframe::M5 => (300, false),
-        Timeframe::M15 => (900, false),
-        Timeframe::M30 => (900, true),
-        Timeframe::H1 => (3600, false),
-        Timeframe::H4 => (3600, true),
-        Timeframe::D1 => (86_400, false),
-        Timeframe::W1 | Timeframe::MN1 => (86_400, true),
+        _ => (60, true),
     }
 }
 
@@ -357,7 +346,7 @@ impl CryptoProvider {
             };
             // Daily closes for the sparkline (best effort).
             let spark = self
-                .history(sec, Timeframe::D1, None, 8)
+                .history(sec, Timeframe::M1, None, 8)
                 .await
                 .map(|b| b.iter().map(|x| x.close).collect())
                 .unwrap_or_default();
@@ -467,7 +456,7 @@ mod tests {
         let pepe = Security::new("PEPEUSD", AssetClass::Crypto);
         assert_eq!(binance_symbol(&pepe), "PEPEUSDT");
         assert_eq!(coinbase_product(&pepe), "PEPE-USD");
-        assert_eq!(binance_interval(Timeframe::MN1), "1M");
+        assert_eq!(binance_interval(Timeframe::M1), "1m");
     }
 
     #[test]

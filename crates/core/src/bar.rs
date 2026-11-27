@@ -141,7 +141,7 @@ mod tests {
 
     #[test]
     fn normalize_sorts_and_dedups() {
-        let s = Series::new("X", Timeframe::D1, vec![b(3, 3.0), b(1, 1.0), b(3, 30.0), b(2, 2.0)]);
+        let s = Series::new("X", Timeframe::M1, vec![b(3, 3.0), b(1, 1.0), b(3, 30.0), b(2, 2.0)]);
         let ts: Vec<_> = s.bars.iter().map(|b| (b.ts, b.close)).collect();
         assert_eq!(ts, vec![(1, 1.0), (2, 2.0), (3, 30.0)]);
     }
@@ -166,7 +166,7 @@ mod tests {
 
     #[test]
     fn lookup_and_merge() {
-        let mut s = Series::new("X", Timeframe::D1, vec![b(10, 1.0), b(20, 2.0), b(30, 3.0)]);
+        let mut s = Series::new("X", Timeframe::M1, vec![b(10, 1.0), b(20, 2.0), b(30, 3.0)]);
         assert_eq!(s.index_at_or_before(25), Some(1));
         assert_eq!(s.index_at_or_before(5), None);
         assert_eq!(s.lower_bound(20), 1);

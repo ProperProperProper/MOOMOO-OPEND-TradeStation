@@ -1734,7 +1734,7 @@ mod tests {
     #[test]
     fn legacy_settings_migrate_to_a_layout() {
         let old = r#"{"layout":"MainRight2","watchlist":["AAPL","BTCUSD Curncy"],"sidebar":false,
-            "panes":[{"Chart":{"symbol":"NVDA","tf":"D1","chart_type":"Candles","log":false,"indicators":[],
+            "panes":[{"Chart":{"symbol":"NVDA","tf":"M1","chart_type":"Candles","log":false,"indicators":[],
             "drawings":[],"compare":null}},"Feed","Wei"]}"#;
         let s: Settings = serde_json::from_str(old).unwrap();
         assert!(!s.sidebar);

@@ -184,7 +184,7 @@ mod tests {
         // Daily bars across 3 months.
         let start = 1_767_225_600; // 2026-01-01
         let times: Vec<i64> = (0..90).map(|i| start + i * 86_400).collect();
-        let ticks = time_ticks(&times, 0, 90, 20.0, Timeframe::D1);
+        let ticks = time_ticks(&times, 0, 90, 20.0, Timeframe::M1);
         let labels: Vec<&str> = ticks.iter().map(|(_, l)| l.as_str()).collect();
         assert!(labels.contains(&"Feb") && labels.contains(&"Mar"), "{labels:?}");
         assert!(ticks.windows(2).all(|w| w[1].0 - w[0].0 >= 20));

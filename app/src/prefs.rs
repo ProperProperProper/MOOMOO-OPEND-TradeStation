@@ -186,7 +186,7 @@ impl Default for PanelDefaults {
     fn default() -> Self {
         Self {
             chart_type: ChartType::Candles,
-            timeframe: Timeframe::D1,
+            timeframe: Timeframe::M1,
             show_volume: true,
             congress_markers: true,
             book_depth: 20,

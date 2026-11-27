@@ -179,7 +179,7 @@ impl TreasuryProvider {
             },
         };
         let mut bars = result?;
-        if tf > Timeframe::D1 {
+        if tf > Timeframe::M1 {
             bars = tf.resample(&bars);
         }
         if bars.is_empty() && end.is_some() {

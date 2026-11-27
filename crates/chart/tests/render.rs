@@ -23,7 +23,7 @@ fn renders_candles_volume_lines_and_hist() {
         return;
     };
     eprintln!("adapter: {:?}", h.adapter_info.name);
-    let bars = sample::generate("AAPL", Timeframe::D1, 2_000, 1_790_000_000);
+    let bars = sample::generate("AAPL", Timeframe::M1, 2_000, 1_790_000_000);
     let series = SeriesGpu::build(&bars);
     let closes: Vec<f64> = bars.iter().map(|b| b.close).collect();
     let overlays = [Overlay {
@@ -80,7 +80,7 @@ fn reveal_sweeps_in_from_the_left_and_fades() {
         eprintln!("no wgpu adapter; skipping");
         return;
     };
-    let bars = sample::generate("AAPL", Timeframe::D1, 2_000, 1_790_000_000);
+    let bars = sample::generate("AAPL", Timeframe::M1, 2_000, 1_790_000_000);
     let series = SeriesGpu::build(&bars);
     let closes: Vec<f64> = bars.iter().map(|b| b.close).collect();
     let overlays = [

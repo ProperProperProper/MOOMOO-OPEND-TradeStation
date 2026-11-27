@@ -87,19 +87,26 @@ pub const PING: &str = r#"{"method":"ping"}"#;
 pub fn interval(tf: Timeframe) -> &'static str {
     match tf {
         Timeframe::M1 => "1m",
+        Timeframe::M2 => "2m",
+        Timeframe::M3 => "3m",
+        Timeframe::M4 => "4m",
         Timeframe::M5 => "5m",
-        Timeframe::M15 => "15m",
-        Timeframe::M30 => "30m",
-        Timeframe::H1 => "1h",
-        Timeframe::H4 => "4h",
-        Timeframe::D1 => "1d",
-        Timeframe::W1 => "1w",
-        Timeframe::MN1 => "1M",
+        Timeframe::M6 => "6m",
+        Timeframe::M7 => "7m",
+        Timeframe::M8 => "8m",
+        Timeframe::M9 => "9m",
     }
 }
 
 fn static_interval(s: &str) -> Option<&'static str> {
-    Timeframe::ALL.into_iter().map(interval).find(|i| *i == s)
+    Timeframe::ALL.into_iter().map(interval).find(|i| *i == s).or_else(|| match s {
+        "1h" => Some("1h"),
+        "4h" => Some("4h"),
+        "1d" => Some("1d"),
+        "1w" => Some("1w"),
+        "1M" => Some("1M"),
+        _ => None,
+    })
 }
 
 /// What one upstream text frame means to us.
@@ -319,7 +326,7 @@ mod tests {
         assert_eq!(slow.subscription(), json!({"type": "l2Book", "coin": "BTC"}));
         assert_eq!(fast.subscription(), json!({"type": "l2Book", "coin": "BTC", "fast": true}));
         assert_eq!((slow.to_string().as_str(), fast.to_string().as_str()), ("l2Book:BTC", "l2Book:BTC:fast"));
-        assert_eq!(Timeframe::ALL.map(interval), ["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1w", "1M"]);
+        assert_eq!(Timeframe::ALL.map(interval), ["1m", "2m", "3m", "4m", "5m", "6m", "7m", "8m", "9m"]);
     }
 
     #[test]

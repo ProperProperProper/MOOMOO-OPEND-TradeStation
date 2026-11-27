@@ -13,7 +13,7 @@ async fn moomoo_markets_creation_and_naming() {
 async fn moomoo_markets_watchlist_restriction() {
     let m = Markets::new().unwrap();
     // Non-watchlist ticker must be rejected by security policy
-    let res = m.history("NONEXISTENT_TICKER_999 US Equity", Timeframe::D1, None, 100).await;
+    let res = m.history("NONEXISTENT_TICKER_999 US Equity", Timeframe::M1, None, 100).await;
     assert!(res.is_err(), "Non-watchlist ticker should be blocked");
     let err_msg = res.unwrap_err().to_string();
     assert!(err_msg.contains("SECURITY RESTRICTION"), "Error should explain security restriction: {err_msg}");

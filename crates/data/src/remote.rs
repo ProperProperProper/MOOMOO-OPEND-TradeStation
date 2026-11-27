@@ -535,7 +535,7 @@ impl<P: MarketData + 'static> RemoteMarkets<P> {
         {
             return v.clone();
         }
-        let v: Vec<f64> = match self.server_history(symbol, Timeframe::D1, None, 8).await {
+        let v: Vec<f64> = match self.server_history(symbol, Timeframe::M1, None, 8).await {
             Ok(b) => b.iter().map(|b| b.close).collect(),
             Err(_) => return Vec::new(),
         };

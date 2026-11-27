@@ -589,7 +589,7 @@ mod tests {
             [0, 1]
         );
         assert_eq!(
-            [Rpc::History { key: key("B"), tf: Timeframe::D1, end: None, limit: 1 }, Rpc::Markets]
+            [Rpc::History { key: key("B"), tf: Timeframe::M1, end: None, limit: 1 }, Rpc::Markets]
                 .map(|x| t(postcard::to_stdvec(&x).unwrap())),
             [0, 1]
         );

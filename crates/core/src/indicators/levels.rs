@@ -1,22 +1,12 @@
 //! Price levels: session keys and pivot points.
 
-use chrono::Datelike;
-
 use crate::Timeframe;
 
 use super::{NAN, Ohlcv};
 
-/// The session a bar at `ts` belongs to on `tf`, for VWAP and pivots: the UTC day
-/// intraday, the month on daily bars, the year above that.
-pub fn session_key(tf: Timeframe) -> impl Fn(i64) -> i64 {
-    move |ts| {
-        let d = chrono::DateTime::from_timestamp(ts, 0).unwrap_or_default();
-        match tf {
-            t if t.is_intraday() => ts.div_euclid(86_400),
-            Timeframe::D1 => (d.year() * 12 + d.month() as i32) as i64,
-            _ => d.year() as i64,
-        }
-    }
+/// The session a bar at `ts` belongs to on `tf`, for VWAP and pivots: the UTC day.
+pub fn session_key(_tf: Timeframe) -> impl Fn(i64) -> i64 {
+    move |ts| ts.div_euclid(86_400)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,10 +129,6 @@ mod tests {
         let k = session_key(Timeframe::M5);
         assert_eq!(k(10), k(day - 1));
         assert_ne!(k(day - 1), k(day));
-        // 2026-01-31 and 2026-02-01 fall in different months on daily bars.
-        let m = session_key(Timeframe::D1);
-        assert_ne!(m(1_769_817_600), m(1_769_904_000));
-        assert_eq!(session_key(Timeframe::W1)(1_769_817_600), 2026);
     }
 
     #[test]

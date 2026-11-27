@@ -220,4 +220,67 @@ impl OpenDProtoSession {
         }
         Ok(out)
     }
+
+    /// Fetches 1-minute historical candlestick bars from OpenD (ProtoID 3103: Qot_RequestHistoryKL)
+    /// market 11 = US Equities. klType 1 = 1-minute. rehabType 1 = forward adjusted.
+    pub async fn get_1min_history(&mut self, symbol: &str, limit: usize) -> Result<Vec<crate::Bar>> {
+        let code = crate::clean_ticker(symbol);
+        let end_time = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let lookback_days = ((limit as i64 * 60) / 86_400 + 7).clamp(7, 30);
+        let begin_time = (chrono::Utc::now() - chrono::Duration::days(lookback_days))
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+
+        let req = serde_json::json!({
+            "c2s": {
+                "rehabType": 1,
+                "klType": 1,
+                "security": {
+                    "market": 11,
+                    "code": code
+                },
+                "beginTime": begin_time,
+                "endTime": end_time,
+                "maxAckNum": limit.clamp(1, 1000)
+            }
+        });
+
+        let res = self.query(3103, &req).await?;
+        let ret_type = res.get("retType").and_then(|v| v.as_i64()).unwrap_or(-1);
+        if ret_type != 0 {
+            let msg = res.get("retMsg").and_then(|v| v.as_str()).unwrap_or("unknown error");
+            bail!("OpenD 1m KL query error: {msg}");
+        }
+
+        let mut bars = Vec::new();
+        if let Some(list) = res.pointer("/s2c/klList").and_then(|v| v.as_array()) {
+            for item in list {
+                let ts = item.get("timestamp")
+                    .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
+                    .or_else(|| {
+                        item.get("time").and_then(|v| v.as_str()).and_then(|s| {
+                            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
+                                .ok()
+                                .map(|dt| dt.and_utc().timestamp())
+                        })
+                    })
+                    .unwrap_or(0);
+
+                let open = item.get("openPrice").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let high = item.get("highPrice").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let low = item.get("lowPrice").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let close = item.get("closePrice").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let volume = item.get("volume")
+                    .and_then(|v| v.as_f64().or_else(|| v.as_str().and_then(|s| s.parse::<f64>().ok())))
+                    .unwrap_or(0.0);
+
+                if ts > 0 && open > 0.0 {
+                    bars.push(crate::Bar { ts, open, high, low, close, volume });
+                }
+            }
+        }
+        bars.sort_by_key(|b| b.ts);
+        bars.dedup_by_key(|b| b.ts);
+        Ok(bars)
+    }
 }

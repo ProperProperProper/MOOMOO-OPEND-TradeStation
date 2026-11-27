@@ -1,91 +1,86 @@
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{DateTime, Datelike, Duration, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::Bar;
 
-/// Chart intervals from 1 minute to 1 month.
+/// Chart intervals strictly restricted to 1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m, 9m.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize)]
 pub enum Timeframe {
-    M1,
-    M5,
-    M15,
-    M30,
-    H1,
-    H4,
     #[default]
-    D1,
-    W1,
-    MN1,
+    M1,
+    M2,
+    M3,
+    M4,
+    M5,
+    M6,
+    M7,
+    M8,
+    M9,
 }
 
 impl Timeframe {
     pub const ALL: [Timeframe; 9] = [
         Timeframe::M1,
+        Timeframe::M2,
+        Timeframe::M3,
+        Timeframe::M4,
         Timeframe::M5,
-        Timeframe::M15,
-        Timeframe::M30,
-        Timeframe::H1,
-        Timeframe::H4,
-        Timeframe::D1,
-        Timeframe::W1,
-        Timeframe::MN1,
+        Timeframe::M6,
+        Timeframe::M7,
+        Timeframe::M8,
+        Timeframe::M9,
     ];
 
-    /// Nominal duration in seconds (months count as 30 days).
-    pub fn seconds(self) -> i64 {
+    pub fn minutes(self) -> i64 {
         match self {
-            Timeframe::M1 => 60,
-            Timeframe::M5 => 300,
-            Timeframe::M15 => 900,
-            Timeframe::M30 => 1800,
-            Timeframe::H1 => 3600,
-            Timeframe::H4 => 14_400,
-            Timeframe::D1 => 86_400,
-            Timeframe::W1 => 604_800,
-            Timeframe::MN1 => 2_592_000,
+            Timeframe::M1 => 1,
+            Timeframe::M2 => 2,
+            Timeframe::M3 => 3,
+            Timeframe::M4 => 4,
+            Timeframe::M5 => 5,
+            Timeframe::M6 => 6,
+            Timeframe::M7 => 7,
+            Timeframe::M8 => 8,
+            Timeframe::M9 => 9,
         }
+    }
+
+    /// Nominal duration in seconds.
+    pub fn seconds(self) -> i64 {
+        self.minutes() * 60
     }
 
     pub fn label(self) -> &'static str {
         match self {
             Timeframe::M1 => "1m",
+            Timeframe::M2 => "2m",
+            Timeframe::M3 => "3m",
+            Timeframe::M4 => "4m",
             Timeframe::M5 => "5m",
-            Timeframe::M15 => "15m",
-            Timeframe::M30 => "30m",
-            Timeframe::H1 => "1H",
-            Timeframe::H4 => "4H",
-            Timeframe::D1 => "1D",
-            Timeframe::W1 => "1W",
-            Timeframe::MN1 => "1M",
+            Timeframe::M6 => "6m",
+            Timeframe::M7 => "7m",
+            Timeframe::M8 => "8m",
+            Timeframe::M9 => "9m",
         }
     }
 
     pub fn is_intraday(self) -> bool {
-        self < Timeframe::D1
+        true
     }
 
-    /// Start of the bucket containing `ts` (weeks start Monday, months on the 1st, UTC).
+    /// Start of the bucket containing `ts` (in UTC seconds).
     pub fn bucket_start(self, ts: i64) -> i64 {
-        match self {
-            Timeframe::W1 => {
-                let d = day_of(ts);
-                let monday = d - Duration::days(d.weekday().num_days_from_monday() as i64);
-                midnight(monday)
-            }
-            Timeframe::MN1 => {
-                let d = day_of(ts);
-                midnight(NaiveDate::from_ymd_opt(d.year(), d.month(), 1).expect("valid month start"))
-            }
-            tf => ts.div_euclid(tf.seconds()) * tf.seconds(),
-        }
+        ts.div_euclid(self.seconds()) * self.seconds()
     }
 
-    /// Aggregate bars of a finer timeframe into this timeframe.
+    /// Aggregate 1-minute bars into this timeframe bucket.
     pub fn resample(self, bars: &[Bar]) -> Vec<Bar> {
-        let mut out: Vec<Bar> = Vec::with_capacity(bars.len() / 2 + 1);
+        if self == Timeframe::M1 {
+            return bars.to_vec();
+        }
+        let mut out: Vec<Bar> = Vec::with_capacity(bars.len() / (self.minutes() as usize) + 1);
         for b in bars {
             let start = self.bucket_start(b.ts);
             match out.last_mut() {
@@ -102,14 +97,6 @@ impl Timeframe {
     }
 }
 
-fn day_of(ts: i64) -> NaiveDate {
-    DateTime::<Utc>::from_timestamp(ts, 0).map(|d| d.date_naive()).unwrap_or_default()
-}
-
-fn midnight(d: NaiveDate) -> i64 {
-    d.and_hms_opt(0, 0, 0).expect("midnight").and_utc().timestamp()
-}
-
 impl fmt::Display for Timeframe {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.label())
@@ -119,24 +106,28 @@ impl fmt::Display for Timeframe {
 impl FromStr for Timeframe {
     type Err = String;
 
-    /// Accepts TradingView/Bloomberg-ish spellings: `1`, `1m`, `5`, `60`, `1h`, `4H`, `D`, `1D`, `W`, `M`, `1MO`.
+    /// Accepts 1..9 interval spellings: `1`, `1m`, `2`, `2m`, ... `9`, `9m`.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let t = s.trim();
-        // A bare or trailing uppercase `M` means month; lowercase `m` means minute.
-        if t == "M" || t == "1M" || t.eq_ignore_ascii_case("1mo") || t.eq_ignore_ascii_case("mo") {
-            return Ok(Timeframe::MN1);
-        }
-        Ok(match t.to_ascii_lowercase().as_str() {
+        let t = s.trim().to_ascii_lowercase();
+        Ok(match t.as_str() {
             "1" | "1m" | "1min" => Timeframe::M1,
+            "2" | "2m" | "2min" => Timeframe::M2,
+            "3" | "3m" | "3min" => Timeframe::M3,
+            "4" | "4m" | "4min" => Timeframe::M4,
             "5" | "5m" | "5min" => Timeframe::M5,
-            "15" | "15m" | "15min" => Timeframe::M15,
-            "30" | "30m" | "30min" => Timeframe::M30,
-            "60" | "1h" | "h" => Timeframe::H1,
-            "240" | "4h" => Timeframe::H4,
-            "d" | "1d" | "day" => Timeframe::D1,
-            "w" | "1w" | "week" => Timeframe::W1,
-            "month" => Timeframe::MN1,
-            _ => return Err(format!("unknown timeframe '{s}'")),
+            "6" | "6m" | "6min" => Timeframe::M6,
+            "7" | "7m" | "7min" => Timeframe::M7,
+            "8" | "8m" | "8min" => Timeframe::M8,
+            "9" | "9m" | "9min" => Timeframe::M9,
+            // Fallbacks
+            "10" | "10m" => Timeframe::M9,
+            "15" | "15m" => Timeframe::M9,
+            "30" | "30m" => Timeframe::M9,
+            "60" | "1h" | "h" => Timeframe::M9,
+            "d" | "1d" | "day" => Timeframe::M1,
+            "w" | "1w" | "week" => Timeframe::M1,
+            "month" | "1mo" | "m" => Timeframe::M1,
+            _ => return Err(format!("unknown timeframe '{s}': only intervals 1..9 (1m..9m) are available")),
         })
     }
 }
@@ -146,34 +137,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_spellings() {
+    fn parse_intervals() {
         assert_eq!("1m".parse::<Timeframe>().unwrap(), Timeframe::M1);
-        assert_eq!("1M".parse::<Timeframe>().unwrap(), Timeframe::MN1);
-        assert_eq!("4H".parse::<Timeframe>().unwrap(), Timeframe::H4);
-        assert_eq!("D".parse::<Timeframe>().unwrap(), Timeframe::D1);
-        assert_eq!("240".parse::<Timeframe>().unwrap(), Timeframe::H4);
-        assert!("7x".parse::<Timeframe>().is_err());
+        assert_eq!("2m".parse::<Timeframe>().unwrap(), Timeframe::M2);
+        assert_eq!("3m".parse::<Timeframe>().unwrap(), Timeframe::M3);
+        assert_eq!("4m".parse::<Timeframe>().unwrap(), Timeframe::M4);
+        assert_eq!("5m".parse::<Timeframe>().unwrap(), Timeframe::M5);
+        assert_eq!("6m".parse::<Timeframe>().unwrap(), Timeframe::M6);
+        assert_eq!("7m".parse::<Timeframe>().unwrap(), Timeframe::M7);
+        assert_eq!("8m".parse::<Timeframe>().unwrap(), Timeframe::M8);
+        assert_eq!("9m".parse::<Timeframe>().unwrap(), Timeframe::M9);
+        assert!("12x".parse::<Timeframe>().is_err());
     }
 
     #[test]
-    fn week_and_month_buckets() {
-        // 2026-10-07 is a Wednesday.
-        let wed = NaiveDate::from_ymd_opt(2026, 10, 7).unwrap().and_hms_opt(15, 30, 0).unwrap().and_utc().timestamp();
-        let mon = NaiveDate::from_ymd_opt(2026, 10, 5).unwrap().and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp();
-        let first = NaiveDate::from_ymd_opt(2026, 10, 1).unwrap().and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp();
-        assert_eq!(Timeframe::W1.bucket_start(wed), mon);
-        assert_eq!(Timeframe::MN1.bucket_start(wed), first);
-        assert_eq!(Timeframe::H1.bucket_start(wed), wed - 30 * 60);
+    fn interval_buckets() {
+        assert_eq!(Timeframe::M3.bucket_start(185), 180);
+        assert_eq!(Timeframe::M5.bucket_start(305), 300);
+        assert_eq!(Timeframe::M7.bucket_start(425), 420);
+        assert_eq!(Timeframe::M9.bucket_start(545), 540);
     }
 
     #[test]
-    fn resample_minutes_to_hour() {
+    fn resample_1min_to_3min() {
         let bars: Vec<Bar> =
-            (0..120).map(|i| Bar::new(i * 60, i as f64, i as f64 + 1.0, i as f64 - 1.0, i as f64 + 0.5, 1.0)).collect();
-        let h = Timeframe::H1.resample(&bars);
-        assert_eq!(h.len(), 2);
-        assert_eq!(h[0], Bar::new(0, 0.0, 60.0, -1.0, 59.5, 60.0));
-        assert_eq!(h[1].ts, 3600);
-        assert_eq!(h[1].open, 60.0);
+            (0..9).map(|i| Bar::new(i * 60, i as f64, i as f64 + 1.0, i as f64 - 1.0, i as f64 + 0.5, 10.0)).collect();
+        let resampled = Timeframe::M3.resample(&bars);
+        assert_eq!(resampled.len(), 3);
+        assert_eq!(resampled[0].ts, 0);
+        assert_eq!(resampled[0].open, 0.0);
+        assert_eq!(resampled[0].close, 2.5);
+        assert_eq!(resampled[0].volume, 30.0);
+        assert_eq!(resampled[1].ts, 180);
     }
 }

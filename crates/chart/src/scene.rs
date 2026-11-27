@@ -347,7 +347,7 @@ mod tests {
 
     #[test]
     fn retina_scales_pane_and_strokes() {
-        let s = SeriesGpu::build(&sample::generate("X", Timeframe::D1, 500, 1_790_000_000));
+        let s = SeriesGpu::build(&sample::generate("X", Timeframe::M1, 500, 1_790_000_000));
         let v = Viewport::fit_last(500, 100, 400.0);
         let pane = |ppp: f32| {
             price_pane(&PricePane {
@@ -376,7 +376,7 @@ mod tests {
 
     #[test]
     fn autoscale_is_what_price_pane_uses() {
-        let s = SeriesGpu::build(&sample::generate("X", Timeframe::D1, 500, 1_790_000_000));
+        let s = SeriesGpu::build(&sample::generate("X", Timeframe::M1, 500, 1_790_000_000));
         let v = Viewport::fit_last(500, 120, 600.0);
         for (show_volume, log) in [(true, false), (false, true)] {
             let p = PricePane {
@@ -397,7 +397,7 @@ mod tests {
     #[test]
     fn reveal_sweeps_relative_to_the_left_edge() {
         use crate::gpu::Reveal;
-        let s = SeriesGpu::build(&sample::generate("X", Timeframe::D1, 500, 1_790_000_000));
+        let s = SeriesGpu::build(&sample::generate("X", Timeframe::M1, 500, 1_790_000_000));
         let v = Viewport::fit_last(500, 100, 400.0);
         let anim = |reveal: Reveal| {
             let out = price_pane(&PricePane {
@@ -449,7 +449,7 @@ mod tests {
 
     #[test]
     fn dots_draw_one_instance_per_point_and_scale_the_price_pane() {
-        let bars = sample::generate("X", Timeframe::D1, 200, 1_790_000_000);
+        let bars = sample::generate("X", Timeframe::M1, 200, 1_790_000_000);
         let s = SeriesGpu::build(&bars);
         let v = Viewport::fit_last(200, 200, 800.0);
         let top = bars.iter().map(|b| b.high).fold(f64::MIN, f64::max) * 2.0;
@@ -505,7 +505,7 @@ mod tests {
 
     #[test]
     fn steps_draw_one_full_bar_dash_per_point() {
-        let s = SeriesGpu::build(&sample::generate("X", Timeframe::H4, 200, 1_790_000_000));
+        let s = SeriesGpu::build(&sample::generate("X", Timeframe::M4, 200, 1_790_000_000));
         let levels: Vec<f64> = (0..200).map(|i| if i / 2 % 2 == 0 { 1.0 } else { 1e6 }).collect();
         let o = Overlay { line: line_ref(&levels), color: [1.0; 4], kind: LineKind::Steps, scale: 1.0 };
         for (bar_px, group) in [(4.0, 1.0), (0.5, 4.0)] {

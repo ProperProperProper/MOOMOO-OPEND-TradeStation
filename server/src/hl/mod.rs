@@ -121,7 +121,7 @@ impl Provider for HlPublicProvider {
         let limit = limit.clamp(1, CANDLE_CAP);
         let end_s = end.unwrap_or_else(|| now_s() + 1);
         // Months are counted as 31 days so the window always covers `limit` bars.
-        let span = if tf == Timeframe::MN1 { 31 * 86_400 } else { tf.seconds() };
+        let span = tf.seconds();
         let start_s = end_s - span * (limit as i64 + 1);
         let bars =
             self.info.candles(inst.as_str(), wire::interval(tf), start_s * 1000, end_s * 1000 - 1, limit).await?;

@@ -52,15 +52,15 @@ fn usage() -> ! {
 
 fn parse_tf(s: &str) -> Result<Timeframe> {
     Ok(match s {
-        "1m" => Timeframe::M1,
-        "5m" => Timeframe::M5,
-        "15m" => Timeframe::M15,
-        "30m" => Timeframe::M30,
-        "1h" => Timeframe::H1,
-        "4h" => Timeframe::H4,
-        "1d" => Timeframe::D1,
-        "1w" => Timeframe::W1,
-        "1M" => Timeframe::MN1,
+        "1m" | "1" => Timeframe::M1,
+        "2m" | "2" => Timeframe::M2,
+        "3m" | "3" => Timeframe::M3,
+        "4m" | "4" => Timeframe::M4,
+        "5m" | "5" => Timeframe::M5,
+        "6m" | "6" => Timeframe::M6,
+        "7m" | "7" => Timeframe::M7,
+        "8m" | "8" => Timeframe::M8,
+        "9m" | "9" => Timeframe::M9,
         _ => bail!("unknown timeframe {s}"),
     })
 }

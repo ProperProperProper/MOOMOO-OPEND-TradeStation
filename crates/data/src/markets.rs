@@ -4,27 +4,41 @@
 //! All external internet providers (Yahoo, Binance, Coinbase, Alpaca, Treasury) are disabled.
 //! DATA FEEDS ARE STRICTLY RESTRICTED TO ITEMS IN THE USER'S MOOMOO ACCOUNT WATCHLIST.
 
+use std::path::PathBuf;
+use std::sync::Mutex;
 use anyhow::{Result, bail};
 use async_trait::async_trait;
 use tr_core::{AssetClass, Bar, Security, Timeframe};
 use tr_moomoo::{OpenDClient, clean_ticker};
 
 use crate::{
-    LiveFeed, MarketData, NewsItem, OptionChain, OrderBook, Quote, SearchHit, YieldCurves, perp_needs_server, security,
+    BarCache, LiveFeed, MarketData, NewsItem, OptionChain, OrderBook, Quote, SearchHit, YieldCurves, perp_needs_server, security,
 };
 
 pub struct Markets {
     moomoo: OpenDClient,
     name: String,
+    cache: Mutex<Option<BarCache>>,
 }
 
 impl Markets {
     pub fn new() -> Result<Self> {
         let moomoo = OpenDClient::default();
         let name = format!("moomoo-opend ({})", moomoo.opend_addr());
+        let cache = {
+            let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+            let dir = if cfg!(target_os = "macos") {
+                home.join("Library/Application Support/terminal")
+            } else {
+                std::env::var_os("XDG_DATA_HOME").map(PathBuf::from).unwrap_or_else(|| home.join(".local/share/terminal"))
+            };
+            let _ = std::fs::create_dir_all(&dir);
+            BarCache::open(dir.join("bars.sqlite3")).ok()
+        };
         Ok(Self {
             moomoo,
             name,
+            cache: Mutex::new(cache),
         })
     }
 }
@@ -35,7 +49,7 @@ impl MarketData for Markets {
         &self.name
     }
 
-    async fn history(&self, symbol: &str, _tf: Timeframe, end: Option<i64>, limit: usize) -> Result<Vec<Bar>> {
+    async fn history(&self, symbol: &str, tf: Timeframe, end: Option<i64>, limit: usize) -> Result<Vec<Bar>> {
         let sec = security(symbol);
         if sec.class == AssetClass::Perp {
             return Err(perp_needs_server(symbol));
@@ -46,8 +60,10 @@ impl MarketData for Markets {
             bail!("SECURITY RESTRICTION: Data feed for '{}' blocked. Only instruments in your Moomoo account watchlist are permitted.", sec.ticker);
         }
 
-        let bars = self.moomoo.fetch_history(&sec.ticker, limit).await?;
-        let mapped = bars
+        // Fetch 1-minute bars strictly (scaled by timeframe multiplier so resampled has enough count)
+        let m1_limit = (limit * tf.minutes() as usize).max(limit);
+        let m1_bars = self.moomoo.fetch_1min_history(&sec.ticker, m1_limit).await?;
+        let mapped: Vec<Bar> = m1_bars
             .into_iter()
             .map(|b| Bar {
                 ts: b.ts,
@@ -59,7 +75,20 @@ impl MarketData for Markets {
             })
             .collect();
 
-        Ok(crate::clip(mapped, end, limit))
+        // Persist 1-minute candles to disk cache so they are stored forever
+        if !mapped.is_empty() {
+            if let Ok(mut guard) = self.cache.lock() {
+                if let Some(c) = guard.as_mut() {
+                    let _ = c.store(&sec.ticker, Timeframe::M1, &mapped);
+                    let _ = c.store(symbol, Timeframe::M1, &mapped);
+                }
+            }
+        }
+
+        // Dynamically aggregate to calculate the requested interval (1m..9m)
+        let aggregated = tf.resample(&mapped);
+
+        Ok(crate::clip(aggregated, end, limit))
     }
 
     async fn quotes(&self, symbols: &[String]) -> Result<Vec<Quote>> {
@@ -85,7 +114,7 @@ impl MarketData for Markets {
         Ok(out)
     }
 
-    fn live(&self, symbol: &str, _tf: Timeframe) -> Option<LiveFeed> {
+    fn live(&self, symbol: &str, tf: Timeframe) -> Option<LiveFeed> {
         let sec = security(symbol);
         if sec.class == AssetClass::Perp {
             return None;
@@ -97,7 +126,7 @@ impl MarketData for Markets {
         tokio::spawn(async move {
             while let Some(q) = quote_rx.recv().await {
                 let bar = Bar {
-                    ts: q.timestamp,
+                    ts: tf.bucket_start(q.timestamp),
                     open: q.prev_close,
                     high: q.high,
                     low: q.low,

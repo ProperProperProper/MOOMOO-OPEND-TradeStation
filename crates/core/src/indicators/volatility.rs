@@ -106,12 +106,7 @@ pub fn standard_error_bands(values: &[f64], n: usize, smooth: usize, k: f64) -> 
 
 /// Bars per year on `tf`, for annualising volatility (US equity hours intraday).
 pub fn periods_per_year(tf: Timeframe) -> f64 {
-    match tf {
-        Timeframe::D1 => 252.0,
-        Timeframe::W1 => 52.0,
-        Timeframe::MN1 => 12.0,
-        intraday => 252.0 * 23_400.0 / intraday.seconds() as f64,
-    }
+    252.0 * 23_400.0 / tf.seconds() as f64
 }
 
 /// `ln(a / b)` for positive prices, NaN otherwise.
@@ -295,7 +290,7 @@ mod tests {
         let g: Vec<f64> = (0..50).map(|i| 100.0 * 1.01f64.powi(i)).collect();
         assert!(historical_volatility(&g, 20, 252.0)[49].abs() < 1e-6);
         assert!(ulcer(&g, 14)[49].abs() < 1e-9);
-        assert_eq!(periods_per_year(Timeframe::H1), 252.0 * 6.5);
+        assert_eq!(periods_per_year(Timeframe::M1), 252.0 * 390.0);
     }
 
     #[test]

@@ -536,13 +536,13 @@ async fn bars_stream_closed_before_the_next_bar_and_history_merges() {
     let s = Setup::new(|_| {}).await;
     let client = s.client(Encoding::Postcard);
     let Ok(RpcResult::History(h)) = client
-        .request(Rpc::History { key: MarketKey::new("BTCUSD Curncy"), tf: Timeframe::H1, end: None, limit: 10 })
+        .request(Rpc::History { key: MarketKey::new("BTCUSD Curncy"), tf: Timeframe::M1, end: None, limit: 10 })
         .await
     else {
         panic!("history")
     };
     assert_eq!(h.len(), 10);
-    assert!(h.windows(2).all(|w| w[1].ts - w[0].ts == 3600));
+    assert!(h.windows(2).all(|w| w[1].ts - w[0].ts == 60));
     let mut sub = client.subscribe(TopicReq::Bars { key: MarketKey::new("BTC"), tf: Timeframe::M1, history: 3 });
     s.mock.until("candle:BTC:1m upstream", |m| m.subs().contains("candle:BTC:1m")).await;
     let Event::Snapshot(TopicData::Bars(snap)) = next(&mut sub).await else { panic!("bars snapshot") };
@@ -606,7 +606,7 @@ async fn hip3_markets_stream_under_their_dex_prefix() {
     let Event::Snapshot(TopicData::Bars(h)) = next_data(&mut bars).await else { panic!("bars") };
     assert_eq!(h.len(), 5);
     let Ok(RpcResult::History(h)) =
-        client.request(Rpc::History { key: key(), tf: Timeframe::D1, end: None, limit: 3 }).await
+        client.request(Rpc::History { key: key(), tf: Timeframe::M1, end: None, limit: 3 }).await
     else {
         panic!("history")
     };
@@ -634,7 +634,7 @@ async fn delisted_markets_are_neither_listed_nor_streamed() {
         e => panic!("expected a refusal, got {e:?}"),
     }
     let r =
-        client.request(Rpc::History { key: MarketKey::new("xyz:OLDX"), tf: Timeframe::D1, end: None, limit: 3 }).await;
+        client.request(Rpc::History { key: MarketKey::new("xyz:OLDX"), tf: Timeframe::M1, end: None, limit: 3 }).await;
     assert!(matches!(&r, Err(e) if e.code == ErrorCode::UnknownMarket), "{r:?}");
     let keys = vec![MarketKey::new("xyz:OLDX"), MarketKey::new("xyz:TSLA")];
     let mut q = client.subscribe(TopicReq::Quotes { keys, max_hz: 4 });
@@ -773,7 +773,7 @@ async fn perps_come_only_from_the_server() {
     let s = Setup::new(|_| {}).await;
     let m = RemoteMarkets::new(&format!("ws://{}", s.gw.addr), tr_data::sample::SampleProvider::default());
     assert_eq!(m.perp_markets().await.unwrap(), ["xyz:TSLA"], "live perps only, delisted ones left out");
-    let bars = m.history("xyz:TSLA", Timeframe::D1, None, 5).await.unwrap();
+    let bars = m.history("xyz:TSLA", Timeframe::M1, None, 5).await.unwrap();
     assert_eq!(bars.len(), 5);
     assert!(s.mock.candle_coins.lock().unwrap().iter().any(|c| c == "xyz:TSLA"), "the server's bars");
     let q = m.quotes(&["xyz:TSLA".into(), "AAPL US Equity".into()]).await.unwrap();
@@ -811,9 +811,9 @@ async fn perps_come_only_from_the_server() {
     // The server goes away: no stand-in data for the perp, while the stock keeps its source.
     let Setup { mock: _mock, gw } = s;
     tokio::time::timeout(WAIT, gw.shutdown()).await.expect("shutdown finishes");
-    let e = m.history("xyz:TSLA", Timeframe::D1, None, 5).await.unwrap_err();
+    let e = m.history("xyz:TSLA", Timeframe::M1, None, 5).await.unwrap_err();
     assert!(format!("{e:#}").contains("Terminal server"), "{e:#}");
-    assert!(m.history("xyz:TSLA", Timeframe::D1, Some(bars[0].ts), 5).await.is_err(), "nor older pages");
+    assert!(m.history("xyz:TSLA", Timeframe::M1, Some(bars[0].ts), 5).await.is_err(), "nor older pages");
     let q = m.quotes(&["xyz:TSLA".into(), "AAPL US Equity".into()]).await.unwrap();
     assert_eq!(q.iter().map(|q| q.symbol.as_str()).collect::<Vec<_>>(), ["AAPL US Equity"]);
     assert!(m.perp_markets().await.is_err(), "the list says the server is unreachable");
@@ -1060,7 +1060,7 @@ async fn requests_made_while_the_gateway_starts_fail_as_retryable() {
     let s = Setup::starting(|c| c.session.ready_timeout = Duration::from_millis(200)).await;
     let client = s.client(Encoding::Postcard);
     let history = || {
-        client.request(Rpc::History { key: MarketKey::new("BTCUSD Curncy"), tf: Timeframe::H1, end: None, limit: 10 })
+        client.request(Rpc::History { key: MarketKey::new("BTCUSD Curncy"), tf: Timeframe::M1, end: None, limit: 10 })
     };
     let r = history().await;
     assert_eq!(r.as_ref().map_err(|e| e.code), Err(ErrorCode::Upstream), "{r:?}");
@@ -1101,7 +1101,7 @@ async fn markets_on_a_venue_later_than_the_grace_come_back() {
     assert!(s.gw.hub().ready(WAIT).await, "ready without the xyz dex");
     let client = s.client(Encoding::Postcard);
     let tsla = || MarketKey::new("xyz:TSLA");
-    let r = client.request(Rpc::History { key: tsla(), tf: Timeframe::H1, end: None, limit: 5 }).await;
+    let r = client.request(Rpc::History { key: tsla(), tf: Timeframe::M1, end: None, limit: 5 }).await;
     assert_eq!(r.as_ref().map_err(|e| e.code), Err(ErrorCode::Upstream), "{r:?}");
     let mut book = client.subscribe(TopicReq::Book { key: tsla(), depth: 5, group: None });
     let mut quotes = client.subscribe(TopicReq::Quotes { keys: vec![MarketKey::new("BTC"), tsla()], max_hz: 10 });

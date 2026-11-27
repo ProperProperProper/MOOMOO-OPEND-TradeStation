@@ -125,7 +125,7 @@ mod tests {
     #[tokio::test]
     async fn non_crypto_comes_from_sample_data() {
         let m = WebMarkets::new().unwrap();
-        let bars = m.history("AAPL US Equity", Timeframe::D1, None, 50).await.unwrap();
+        let bars = m.history("AAPL US Equity", Timeframe::M1, None, 50).await.unwrap();
         assert_eq!(bars.len(), 50);
         let q = m.quotes(&["AAPL US Equity".into(), "EURUSD Curncy".into()]).await.unwrap();
         assert_eq!(q.len(), 2);
@@ -138,7 +138,7 @@ mod tests {
     #[tokio::test]
     async fn perps_need_the_server() {
         let m = WebMarkets::new().unwrap();
-        assert!(m.history("xyz:AAPL", Timeframe::D1, None, 50).await.is_err());
+        assert!(m.history("xyz:AAPL", Timeframe::M1, None, 50).await.is_err());
         assert!(m.order_book("xyz:AAPL", 10).await.is_err());
         let q = m.quotes(&["xyz:AAPL".into(), "AAPL US Equity".into()]).await.unwrap();
         assert_eq!(q.iter().map(|q| q.symbol.as_str()).collect::<Vec<_>>(), ["AAPL US Equity"]);

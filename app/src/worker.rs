@@ -501,7 +501,17 @@ async fn congress_refresh(s: &Shared) {
 /// Bars saved by an earlier session, to paint before the network answers.
 #[cfg(not(target_arch = "wasm32"))]
 fn cached_bars(s: &Shared, symbol: &str, tf: Timeframe, limit: usize) -> Option<Vec<Bar>> {
-    s.cache.lock().ok().and_then(|c| c.as_ref().and_then(|c| c.load(symbol, tf, limit).ok()))
+    let m1_limit = (limit * tf.minutes() as usize).max(limit);
+    s.cache.lock().ok().and_then(|c| {
+        c.as_ref().and_then(|c| {
+            if let Ok(m1_bars) = c.load(symbol, Timeframe::M1, m1_limit) {
+                if !m1_bars.is_empty() {
+                    return Some(tf.resample(&m1_bars));
+                }
+            }
+            c.load(symbol, tf, limit).ok()
+        })
+    })
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -589,10 +599,8 @@ pub fn align_compare(base: &[Bar], other: &[Bar]) -> Vec<f64> {
 fn default_limit(tf: Timeframe) -> usize {
     match tf {
         Timeframe::M1 => 5_000,
-        Timeframe::M5 | Timeframe::M15 | Timeframe::M30 => 5_000,
-        Timeframe::H1 | Timeframe::H4 => 4_000,
-        Timeframe::D1 => 6_000,
-        Timeframe::W1 | Timeframe::MN1 => 2_000,
+        Timeframe::M2 | Timeframe::M3 | Timeframe::M4 | Timeframe::M5 => 5_000,
+        Timeframe::M6 | Timeframe::M7 | Timeframe::M8 | Timeframe::M9 => 5_000,
     }
 }
 
@@ -1085,7 +1093,7 @@ async fn profile(s: &Shared, query: &str) -> Option<Profile> {
     let fetches = tickers.into_iter().map(|t| {
         let provider = provider.clone();
         async move {
-            let r = provider.history(&format!("{t} US Equity"), Timeframe::D1, None, days.min(4000)).await;
+            let r = provider.history(&format!("{t} US Equity"), Timeframe::M1, None, days.min(4000)).await;
             (t, r)
         }
     });
@@ -1145,11 +1153,11 @@ mod tests {
 
     #[test]
     fn indicators_build_expected_overlays() {
-        let bars = tr_core::sample::generate("X", Timeframe::D1, 300, 1_790_000_000);
+        let bars = tr_core::sample::generate("X", Timeframe::M1, 300, 1_790_000_000);
         let palette = crate::themes::terminal_light().palette(theme::DEFAULT_ACCENT);
         let specs: Vec<IndicatorSpec> =
             ["BB", "MACD", "VWAP", "PSAR", "PIVOT"].iter().map(|c| IndicatorSpec::new(c, &[]).unwrap()).collect();
-        let built = build_indicators(&bars, Timeframe::D1, &specs, &palette);
+        let built = build_indicators(&bars, Timeframe::M1, &specs, &palette);
         assert_eq!(built[0].overlays.len(), 3);
         // The histogram draws first, under the MACD and signal lines.
         assert_eq!(built[1].overlays[0].1.kind, LineKind::Hist);
@@ -1266,7 +1274,7 @@ mod tests {
             pane: 1,
             generation: 1,
             symbol: symbol.into(),
-            tf: Timeframe::D1,
+            tf: Timeframe::M1,
             limit: 10,
         };
         handle(&s, load("xyz:AAPL")).await;
@@ -1306,7 +1314,7 @@ mod tests {
             ctx: egui::Context::default(),
         });
         let symbol = "BTCUSD Curncy".to_string();
-        handle(&s, Request::History { pane: 1, generation: 1, symbol, tf: Timeframe::D1, limit: 10 }).await;
+        handle(&s, Request::History { pane: 1, generation: 1, symbol, tf: Timeframe::M1, limit: 10 }).await;
         (s, rx, provider)
     }
 
@@ -1342,7 +1350,7 @@ mod tests {
             pane: 1,
             generation: 1,
             symbol: "BTCUSD Curncy".into(),
-            tf: Timeframe::D1,
+            tf: Timeframe::M1,
             existing: Arc::new(Vec::new()),
             limit: 10,
         };

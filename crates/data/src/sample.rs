@@ -60,7 +60,7 @@ impl MarketData for SampleProvider {
     async fn quotes(&self, symbols: &[String]) -> Result<Vec<Quote>> {
         let mut out = Vec::with_capacity(symbols.len());
         for s in symbols.iter().filter(|s| !is_perp(s)) {
-            let bars = self.history(s, Timeframe::D1, None, 2).await?;
+            let bars = self.history(s, Timeframe::M1, None, 2).await?;
             if let Some(last) = bars.last() {
                 let prev = if bars.len() > 1 { bars[bars.len() - 2].close } else { last.open };
                 out.push(Quote { symbol: s.clone(), last: last.close, prev_close: prev, ts: last.ts, spark: vec![] });
@@ -74,7 +74,7 @@ impl MarketData for SampleProvider {
         if is_perp(symbol) {
             return Err(perp_needs_server(symbol));
         }
-        let spot = self.bars(symbol, Timeframe::D1).last().map(|b| b.close).unwrap_or(100.0);
+        let spot = self.bars(symbol, Timeframe::M1).last().map(|b| b.close).unwrap_or(100.0);
         Ok(simulated_chain(symbol, spot, expiration, chrono::Utc::now().timestamp()))
     }
 
@@ -226,10 +226,10 @@ mod tests {
     #[tokio::test]
     async fn paging_is_contiguous() {
         let p = SampleProvider::at(1_790_000_000, 1_000);
-        let recent = p.history("AAPL", Timeframe::H1, None, 300).await.unwrap();
-        let older = p.history("AAPL", Timeframe::H1, Some(recent[0].ts), 300).await.unwrap();
+        let recent = p.history("AAPL", Timeframe::M1, None, 300).await.unwrap();
+        let older = p.history("AAPL", Timeframe::M1, Some(recent[0].ts), 300).await.unwrap();
         assert_eq!(older.len(), 300);
-        assert_eq!(older.last().unwrap().ts + 3600, recent[0].ts);
+        assert_eq!(older.last().unwrap().ts + 60, recent[0].ts);
         assert_eq!(older.last().unwrap().close, recent[0].open);
     }
 

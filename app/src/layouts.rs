@@ -498,7 +498,7 @@ mod tests {
     fn older_pane_settings_still_load() {
         // Chart settings written before volume/congress/magnet were persisted.
         let raw = r#"{"name":"Old","dock":{"type":"tabs","panes":[1]},"panes":[{"id":1,"Chart":{"symbol":"AAPL",
-            "tf":"D1","chart_type":"Line","log":true,"indicators":[],"drawings":[],"compare":null}},
+            "tf":"M1","chart_type":"Line","log":true,"indicators":[],"drawings":[],"compare":null}},
             {"id":2,"Feed":null}]}"#;
         let doc = LayoutDoc::from_json(raw.as_bytes()).unwrap();
         match &doc.panes[0].settings {

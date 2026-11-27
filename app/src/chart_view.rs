@@ -1516,7 +1516,7 @@ mod tests {
     #[test]
     fn cached_bars_that_could_not_refresh_say_why() {
         let down = "the Terminal server is not reachable";
-        let mut c = ChartState::new(1, "xyz:AAPL", Timeframe::M15);
+        let mut c = ChartState::new(1, "xyz:AAPL", Timeframe::M1);
         c.on_history_error(c.generation, down.into());
         assert_eq!(c.status_text(), format!("ERR {down}"), "with nothing to show, the error is the message");
         c.error = None;
@@ -1525,7 +1525,7 @@ mod tests {
         assert_eq!(c.status_text(), format!("3 cached bars · {down}"));
         c.on_history_error(c.generation + 1, "another load".into());
         assert_eq!(c.status_text(), format!("3 cached bars · {down}"), "other generations are ignored");
-        let mut p = ChartState::new(2, "xyz:AAPL", Timeframe::M15);
+        let mut p = ChartState::new(2, "xyz:AAPL", Timeframe::M1);
         p.bars = c.bars.clone();
         p.paging = true;
         p.on_history_error(p.generation, down.into());
@@ -1557,8 +1557,8 @@ mod tests {
 
     #[test]
     fn view_changes_glide_from_what_is_shown() {
-        let mut c = ChartState::new(1, "AAPL", Timeframe::D1);
-        c.bars = Arc::new(tr_core::sample::generate("AAPL", Timeframe::D1, 500, 1_790_000_000));
+        let mut c = ChartState::new(1, "AAPL", Timeframe::M1);
+        c.bars = Arc::new(tr_core::sample::generate("AAPL", Timeframe::M1, 500, 1_790_000_000));
         let shown = Viewport::fit_last(500, 100, 800.0);
         c.viewport = Some(shown);
         c.pan_bars(-20.0);

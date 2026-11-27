@@ -66,13 +66,9 @@ fn interval(tf: Timeframe) -> (&'static str, Option<i64>) {
     const DAY: i64 = 86_400;
     match tf {
         Timeframe::M1 => ("1m", Some(7 * DAY)),
+        Timeframe::M2 => ("2m", Some(59 * DAY)),
         Timeframe::M5 => ("5m", Some(59 * DAY)),
-        Timeframe::M15 => ("15m", Some(59 * DAY)),
-        Timeframe::M30 => ("30m", Some(59 * DAY)),
-        Timeframe::H1 | Timeframe::H4 => ("60m", Some(729 * DAY)),
-        Timeframe::D1 => ("1d", None),
-        Timeframe::W1 => ("1wk", None),
-        Timeframe::MN1 => ("1mo", None),
+        _ => ("1m", Some(7 * DAY)),
     }
 }
 
@@ -157,12 +153,7 @@ impl MarketData for YahooProvider {
         let now = chrono::Utc::now().timestamp();
         let period2 = end.unwrap_or(now + 60);
         let (iv, max_back) = interval(tf);
-        let base_tf = if tf == Timeframe::H4 { Timeframe::H1 } else { tf };
-        let factor = if tf == Timeframe::H4 { 4 } else { 1 };
-        // Over-ask to cover weekends/holidays and, intraday, the ~6.5h equity session
-        // (crypto and FX simply return more than needed and get clipped).
-        let stretch = if tf.is_intraday() { 6 } else { 2 };
-        let want = limit as i64 * factor * base_tf.seconds() * stretch + 7 * 86_400;
+        let want = limit as i64 * tf.seconds() * 6 + 7 * 86_400;
         let mut period1 = period2 - want;
         if let Some(max) = max_back {
             period1 = period1.max(now - max);
@@ -170,12 +161,9 @@ impl MarketData for YahooProvider {
         if period1 >= period2 {
             return Ok(Vec::new());
         }
-        let mut bars = self.chart(symbol, iv, period1, period2).await?.bars;
-        // Yahoo's weekly/monthly timestamps are session opens; snap to our calendar buckets.
-        if matches!(tf, Timeframe::W1 | Timeframe::MN1 | Timeframe::H4) {
-            bars = tf.resample(&bars);
-        }
-        Ok(crate::clip(bars, end, limit))
+        let bars = self.chart(symbol, iv, period1, period2).await?.bars;
+        let resampled = tf.resample(&bars);
+        Ok(crate::clip(resampled, end, limit))
     }
 
     /// Batched via the spark endpoint (20 symbols per request).

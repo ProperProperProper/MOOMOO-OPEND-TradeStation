@@ -174,12 +174,12 @@ impl Range {
         match self {
             Range::D1 => Timeframe::M1,
             Range::D5 => Timeframe::M5,
-            Range::M1 => Timeframe::M30,
-            Range::M3 => Timeframe::H1,
-            Range::M6 => Timeframe::H4,
-            Range::Ytd | Range::Y1 => Timeframe::D1,
-            Range::Y5 => Timeframe::W1,
-            Range::All => Timeframe::MN1,
+            Range::M1 => Timeframe::M1,
+            Range::M3 => Timeframe::M3,
+            Range::M6 => Timeframe::M6,
+            Range::Ytd | Range::Y1 => Timeframe::M9,
+            Range::Y5 => Timeframe::M9,
+            Range::All => Timeframe::M9,
         }
     }
 
@@ -446,20 +446,7 @@ pub fn hint(input: &str) -> String {
 
 fn describe(f: &Function) -> String {
     match f {
-        Function::Timeframe(tf) => format!(
-            "Interval {}",
-            match tf {
-                Timeframe::M1 => "1 minute",
-                Timeframe::M5 => "5 minutes",
-                Timeframe::M15 => "15 minutes",
-                Timeframe::M30 => "30 minutes",
-                Timeframe::H1 => "1 hour",
-                Timeframe::H4 => "4 hours",
-                Timeframe::D1 => "1 day",
-                Timeframe::W1 => "1 week",
-                Timeframe::MN1 => "1 month",
-            }
-        ),
+        Function::Timeframe(tf) => format!("Interval {} minute{}", tf.minutes(), if tf.minutes() == 1 { "" } else { "s" }),
         Function::ChartType(c) => format!("Chart type {}", c.label()),
         Function::Indicator(i) => format!("Toggle {} — {}", i.label(), i.name()),
         Function::IndicatorPicker(q) if q.is_empty() => "Browse indicators".into(),
@@ -584,12 +571,11 @@ mod tests {
     #[test]
     fn timeframes_and_ranges() {
         assert_eq!(parse("5"), Some(Command::Function(Function::Timeframe(Timeframe::M5))));
-        assert_eq!(parse("1W"), Some(Command::Function(Function::Timeframe(Timeframe::W1))));
-        assert_eq!(parse("1M"), Some(Command::Function(Function::Timeframe(Timeframe::MN1))));
         assert_eq!(parse("1m"), Some(Command::Function(Function::Timeframe(Timeframe::M1))));
+        assert_eq!(parse("3m"), Some(Command::Function(Function::Timeframe(Timeframe::M3))));
         assert_eq!(parse("YTD"), Some(Command::Function(Function::Range(Range::Ytd))));
         assert_eq!(parse("RANGE 5D"), Some(Command::Function(Function::Range(Range::D5))));
-        assert_eq!(Range::Y5.timeframe(), Timeframe::W1);
+        assert_eq!(Range::Y5.timeframe(), Timeframe::M9);
     }
 
     #[test]
@@ -730,8 +716,8 @@ mod tests {
         assert_eq!(parse("GC"), Some(Command::Function(Function::Curve)));
         assert_eq!(parse("SECF gold"), Some(Command::Function(Function::Search("gold".into()))));
         assert_eq!(
-            parse("AAPL US EQUITY 1W"),
-            Some(Command::SymbolFunction("AAPL US Equity".into(), Function::Timeframe(Timeframe::W1)))
+            parse("AAPL US EQUITY 3M"),
+            Some(Command::SymbolFunction("AAPL US Equity".into(), Function::Timeframe(Timeframe::M3)))
         );
         assert_eq!(parse("AAPL WHATEVER"), None);
     }

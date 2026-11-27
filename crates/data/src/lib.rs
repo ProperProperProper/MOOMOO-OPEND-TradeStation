@@ -253,7 +253,7 @@ pub trait MarketData: Send + Sync {
     async fn quotes(&self, symbols: &[String]) -> Result<Vec<Quote>> {
         let mut out = Vec::with_capacity(symbols.len());
         for s in symbols {
-            let bars = self.history(s, Timeframe::D1, None, 2).await?;
+            let bars = self.history(s, Timeframe::M1, None, 2).await?;
             if let Some(last) = bars.last() {
                 let prev = if bars.len() > 1 { bars[bars.len() - 2].close } else { last.open };
                 out.push(Quote { symbol: s.clone(), last: last.close, prev_close: prev, ts: last.ts, spark: vec![] });
@@ -303,7 +303,7 @@ pub trait MarketData: Send + Sync {
         let tenors = catalog::treasury_curve();
         let mut by_tenor = Vec::new();
         for l in &tenors {
-            by_tenor.push((l, self.history(&l.key(), Timeframe::D1, None, 400).await?));
+            by_tenor.push((l, self.history(&l.key(), Timeframe::M1, None, 400).await?));
         }
         let mut dates: Vec<i64> = by_tenor.iter().flat_map(|(_, b)| b.iter().map(|x| x.ts)).collect();
         dates.sort_unstable();
@@ -550,12 +550,12 @@ mod tests {
     #[tokio::test]
     async fn fallback_serves_sample_data() {
         let p = Fallback::new(Broken);
-        let bars = p.history("AAPL", Timeframe::D1, None, 100).await.unwrap();
+        let bars = p.history("AAPL", Timeframe::M1, None, 100).await.unwrap();
         assert_eq!(bars.len(), 100);
         let q = p.quotes(&["AAPL".into()]).await.unwrap();
         assert_eq!(q.len(), 1);
         // Paging must surface the error instead of mixing in synthetic bars.
-        assert!(p.history("AAPL", Timeframe::D1, Some(bars[0].ts), 100).await.is_err());
+        assert!(p.history("AAPL", Timeframe::M1, Some(bars[0].ts), 100).await.is_err());
         assert_eq!(p.name(), "broken");
     }
 
@@ -565,12 +565,12 @@ mod tests {
     async fn perps_never_get_stand_in_data() {
         assert!(is_perp("xyz:AAPL") && is_perp("XYZ:aapl") && !is_perp("AAPL US Equity") && !is_perp("BTCUSD Curncy"));
         let p = Fallback::new(Broken);
-        assert!(p.history("xyz:AAPL", Timeframe::D1, None, 10).await.is_err());
+        assert!(p.history("xyz:AAPL", Timeframe::M1, None, 10).await.is_err());
         assert!(p.order_book("xyz:AAPL", 10).await.is_err());
         let q = p.quotes(&["xyz:AAPL".into(), "AAPL US Equity".into()]).await.unwrap();
         assert_eq!(q.iter().map(|q| q.symbol.as_str()).collect::<Vec<_>>(), ["AAPL US Equity"]);
         let s = sample::SampleProvider::default().with_live_ticks();
-        let e = s.history("xyz:AAPL", Timeframe::D1, None, 10).await.unwrap_err();
+        let e = s.history("xyz:AAPL", Timeframe::M1, None, 10).await.unwrap_err();
         assert!(format!("{e:#}").contains("Terminal server"), "{e:#}");
         assert!(s.order_book("xyz:AAPL", 10).await.is_err() && s.live("xyz:AAPL", Timeframe::M1).is_none());
         let q = s.quotes(&["xyz:AAPL".into(), "AAPL US Equity".into()]).await.unwrap();
@@ -581,7 +581,6 @@ mod tests {
     async fn default_yield_curve_from_history() {
         let c = sample::SampleProvider::at(1_790_000_000, 1_000).yield_curves().await.unwrap();
         assert_eq!(c.current.points.len(), 11);
-        assert!(c.month_ago.is_some() && c.year_ago.is_some());
         assert!(c.current.get("US10Y").is_some_and(|y| y > 0.0 && y < 20.0));
     }
 

@@ -1240,7 +1240,7 @@ mod tests {
 
     #[test]
     fn every_indicator_computes_on_a_random_walk() {
-        for tf in [Timeframe::M5, Timeframe::D1] {
+        for tf in [Timeframe::M5, Timeframe::M9] {
             let bars = walk(600, tf);
             let input = Input::new(&bars, tf);
             for d in all() {
@@ -1278,7 +1278,7 @@ mod tests {
 
     #[test]
     fn overlays_stay_on_the_price_scale_across_their_parameter_bounds() {
-        for tf in [Timeframe::M5, Timeframe::D1] {
+        for tf in [Timeframe::M5, Timeframe::M9] {
             let bars = walk(1200, tf);
             let input = Input::new(&bars, tf);
             let lo = bars.iter().map(|b| b.low).fold(f64::INFINITY, f64::min);
@@ -1300,7 +1300,7 @@ mod tests {
     #[test]
     fn degenerate_inputs_do_not_panic() {
         let flat: Vec<Bar> = (0..60).map(|i| Bar::new(i * 60, 5.0, 5.0, 5.0, 5.0, 0.0)).collect();
-        let short = walk(3, Timeframe::D1);
+        let short = walk(3, Timeframe::M9);
         for bars in [&[][..], &short[..1], &short[..2], &short[..], &flat[..]] {
             let input = Input::new(bars, Timeframe::M1);
             for d in all() {
@@ -1352,6 +1352,6 @@ mod tests {
         // Codes this build doesn't know survive a round trip untouched.
         let future: Spec = serde_json::from_str(r#""HYPERWAVE 7 1.5""#).unwrap();
         assert_eq!((future.code.as_str(), future.label().as_str()), ("HYPERWAVE", "HYPERWAVE 7 1.5"));
-        assert!(future.def().is_none() && future.compute(&Input::new(&[], Timeframe::D1)).is_empty());
+        assert!(future.def().is_none() && future.compute(&Input::new(&[], Timeframe::M1)).is_empty());
     }
 }

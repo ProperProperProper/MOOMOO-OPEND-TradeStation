@@ -80,11 +80,7 @@ pub fn generate_with(
     let base_vol = 1.0e6 * (step as f64 / 86_400.0).sqrt();
     let mut bars = Vec::with_capacity(count);
     for i in 0..count {
-        let ts = match tf {
-            // Calendar buckets: step back roughly then snap so weeks/months align.
-            Timeframe::W1 | Timeframe::MN1 => tf.bucket_start(end - (count - 1 - i) as i64 * step),
-            _ => end - (count - 1 - i) as i64 * step,
-        };
+        let ts = end - (count - 1 - i) as i64 * step;
         let open = price;
         let ret = drift + sigma * rng.normal();
         let close = (open * ret.exp()).max(0.01);
@@ -105,29 +101,29 @@ mod tests {
 
     #[test]
     fn deterministic_and_valid() {
-        let a = generate("AAPL", Timeframe::D1, 500, 1_790_000_000);
-        let b = generate("AAPL", Timeframe::D1, 500, 1_790_000_000);
+        let a = generate("AAPL", Timeframe::M1, 500, 1_790_000_000);
+        let b = generate("AAPL", Timeframe::M1, 500, 1_790_000_000);
         assert_eq!(a, b);
         assert_eq!(a.len(), 500);
         assert!(a.windows(2).all(|w| w[0].ts < w[1].ts));
         assert!(a.iter().all(|b| b.low <= b.open.min(b.close) && b.high >= b.open.max(b.close) && b.low > 0.0));
-        assert_ne!(a, generate("MSFT", Timeframe::D1, 500, 1_790_000_000));
+        assert_ne!(a, generate("MSFT", Timeframe::M1, 500, 1_790_000_000));
     }
 
     #[test]
     fn security_levels() {
         use crate::{AssetClass, Security};
-        let btc = for_security(&Security::new("BTCUSD", AssetClass::Crypto), Timeframe::D1, 300, 1_790_000_000);
+        let btc = for_security(&Security::new("BTCUSD", AssetClass::Crypto), Timeframe::M1, 300, 1_790_000_000);
         assert!((btc.last().unwrap().close - 65_000.0).abs() < 1e-6);
-        let tnx = for_security(&Security::new("US10Y", AssetClass::Govt), Timeframe::D1, 300, 1_790_000_000);
+        let tnx = for_security(&Security::new("US10Y", AssetClass::Govt), Timeframe::M1, 300, 1_790_000_000);
         assert!(tnx.iter().all(|b| b.low > 0.0 && b.high < 20.0));
-        let fx = for_security(&Security::new("EURUSD", AssetClass::Fx), Timeframe::H1, 300, 1_790_000_000);
+        let fx = for_security(&Security::new("EURUSD", AssetClass::Fx), Timeframe::M5, 300, 1_790_000_000);
         assert!(fx.iter().all(|b| (b.close - 1.09).abs() < 0.5));
     }
 
     #[test]
-    fn monthly_buckets_are_unique() {
-        let m = generate("SPY", Timeframe::MN1, 120, 1_790_000_000);
+    fn minute_buckets_are_unique() {
+        let m = generate("SPY", Timeframe::M9, 120, 1_790_000_000);
         assert!(m.windows(2).all(|w| w[0].ts < w[1].ts));
         assert!(m.len() >= 110);
     }
