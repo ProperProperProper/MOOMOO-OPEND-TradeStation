@@ -110,7 +110,7 @@ fn settings_blurb(tab: SettingsTab) -> &'static str {
         SettingsTab::Hotkeys => "Rebind keyboard shortcuts",
         SettingsTab::Panels => "Defaults for new charts and order books",
         SettingsTab::Layouts => "Saved layouts and presets",
-        SettingsTab::Brokerage => "SnapTrade keys and connected brokerages",
+        SettingsTab::Brokerage => "Moomoo OpenD Gateway and watchlist status",
         SettingsTab::Trading => "Enable trading, order limits and confirmations",
     }
 }
@@ -138,7 +138,7 @@ pub(super) fn static_items() -> Vec<Item> {
         Item::new(
             Kind::Action,
             "Open Brokerage settings",
-            "BROKER · SnapTrade keys and connections",
+            "BROKER · Moomoo OpenD Gateway and watchlist",
             Target::Run("BROKER".into()),
         )
         .keywords("snaptrade keys connect broker"),

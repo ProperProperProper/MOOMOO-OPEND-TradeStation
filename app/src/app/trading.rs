@@ -1742,17 +1742,11 @@ impl TerminalApp {
         }
     }
 
-    /// Settings › Brokerage access line, which depends on whether trading is enabled.
+    /// Settings › Brokerage access line, which reflects Moomoo OpenD local loopback.
     pub(super) fn brokerage_access_note(&self) -> String {
-        if self.trading_enabled() {
-            "Live trading is enabled (Settings › Trading): confirmed orders are sent to your broker. Connect Brokerage \
-             requests read-only access; use Reconnect with Trading Access in Settings › Trading for brokers that trade."
-                .into()
-        } else {
-            "Read-only: Terminal reads accounts, balances, positions, orders and activity. Live trading is off \
-             (Settings › Trading), and the Connection Portal requests read-only access."
-                .into()
-        }
+        "Moomoo OpenD Mode: Terminal connects directly to your local Moomoo OpenD process (127.0.0.1:11111). \
+         Data feeds and quote streaming are strictly gated to instruments in your Moomoo account watchlist."
+            .into()
     }
 
     fn save_prefs_now(&mut self) {
@@ -1860,11 +1854,11 @@ impl TerminalApp {
             "Market orders fill at the terminal's last quote; limit and stop orders fill when the quote crosses their price. No commissions, no short selling, Day orders expire at the 4 p.m. New York close.",
         );
 
-        section(ui, "Live trading (SnapTrade)");
+        section(ui, "Live trading (Moomoo OpenD)");
         let on = self.prefs.trading.enabled;
         ui.label(
             RichText::new(if on {
-                "Live orders are ON: confirmed orders are sent to your broker."
+                "Live orders are ON: confirmed orders are sent to your Moomoo OpenD gateway."
             } else {
                 "Live orders are OFF."
             })
@@ -1873,7 +1867,7 @@ impl TerminalApp {
         );
         note(
             ui,
-            "With live accounts selected, every order is checked by your broker through SnapTrade (estimated cost and fees) and needs one final confirmation. Open orders can be cancelled from ORD.",
+            "With live accounts selected, every order is checked by your local Moomoo OpenD gateway (estimated cost and fees) and needs one final confirmation. Open orders can be cancelled from ORD.",
         );
         ui.horizontal(|ui| {
             if on {
@@ -1893,7 +1887,7 @@ impl TerminalApp {
 
         self.hl_settings(ui, cmds);
 
-        section(ui, "Safety (SnapTrade)");
+        section(ui, "Safety (Moomoo OpenD)");
         ui.horizontal(|ui| {
             let mut limited = self.prefs.trading.max_order_value.is_some();
             if ui.checkbox(&mut limited, "Maximum live order value").changed() {

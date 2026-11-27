@@ -510,7 +510,7 @@ fn describe(f: &Function) -> String {
         Function::Curve => "US Treasury yield curve".into(),
         Function::Search(q) => format!("Search securities: {q}"),
         Function::Portfolio(v, a) if a.is_empty() => match v {
-            PortView::Summary => "Brokerage portfolio: value, cash, P&L and holdings (SnapTrade)".into(),
+            PortView::Summary => "Brokerage portfolio: value, cash, P&L and holdings (Moomoo OpenD)".into(),
             PortView::Accounts => "Brokerage accounts and balances".into(),
             PortView::Positions => "Brokerage positions with unrealised P&L".into(),
             PortView::Orders => "Brokerage orders (last 30 days)".into(),
@@ -518,7 +518,7 @@ fn describe(f: &Function) -> String {
         },
         Function::Portfolio(_, a) => match a.as_str() {
             "REFRESH" | "SYNC" => "Reload brokerage accounts now".into(),
-            "CONNECT" | "LINK" => "Connect a brokerage in your browser (SnapTrade, read-only)".into(),
+            "CONNECT" | "LINK" => "Connect to local Moomoo OpenD gateway (127.0.0.1:11111)".into(),
             _ => "Brokerage connection settings".into(),
         },
         Function::Trade(t) => {

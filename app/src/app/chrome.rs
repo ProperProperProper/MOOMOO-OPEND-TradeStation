@@ -269,7 +269,7 @@ impl TerminalApp {
             self.apply(Function::Settings);
             ui.close();
         }
-        if ui.button("Brokerage Accounts…").on_hover_text("Connect brokers through SnapTrade (read-only)").clicked() {
+        if ui.button("Moomoo OpenD Gateway…").on_hover_text("Configure local Moomoo OpenD gateway (127.0.0.1:11111)").clicked() {
             self.open_brokerage_settings();
             ui.close();
         }
@@ -687,7 +687,7 @@ impl TerminalApp {
             let settings_open = self.idx(self.focus).is_some_and(|i| matches!(self.panes[i].kind, PaneKind::Settings))
                 && self.settings_tab == super::settings_view::SettingsTab::Brokerage;
             let resp = nav_row(ui, Icon::Gear, "Brokerage Settings", None, settings_open)
-                .on_hover_text("Connect brokers through SnapTrade: keys, connections, test");
+                .on_hover_text("Moomoo OpenD Gateway: local connection, watchlist status, test");
             if resp.clicked() {
                 out.push(SidebarCmd::Function(Function::Portfolio(V::Summary, "SETUP".into())));
             }

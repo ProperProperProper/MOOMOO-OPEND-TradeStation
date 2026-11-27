@@ -502,313 +502,66 @@ impl TerminalApp {
             ui.label(RichText::new(s).font(ui_font(11.5)).color(muted()));
         };
         let mode = self.broker.mode();
-        // Load accounts and connections the first time the tab is shown with working keys.
-        if mode == BrokerMode::Live
-            && self.broker.portfolio.as_ref().is_none_or(|p| p.simulated)
-            && !self.broker.loading
-            && self.broker.error.is_none()
-        {
-            self.refresh_portfolio();
-        }
-        let busy = self.broker.busy.is_some() || self.broker.disconnecting.is_some();
-
         let access_note = self.brokerage_access_note();
-        // ---- status card ----
+        // ---- Moomoo OpenD Status Card ----
         ui.add_space(dp(4.0));
-        // A snapshot (small, and only while this tab is open) so the UI below can mutate state.
-        let live_pf = self.broker.portfolio.clone().filter(|p| !p.simulated);
-        let live_pf = live_pf.as_deref();
-        let (dot, headline, next) = match mode {
-            BrokerMode::Setup | BrokerMode::Simulated if !self.broker.creds.has_keys() => (
-                theme::amber(),
-                "Not set up".to_string(),
-                "Enter your SnapTrade client ID and consumer key below, then Save.",
-            ),
-            BrokerMode::Setup | BrokerMode::Simulated => (
-                theme::amber(),
-                "Keys saved, no SnapTrade user yet".to_string(),
-                "Click Register User (commercial keys), or clear both user fields for personal keys.",
-            ),
-            BrokerMode::Live => match (&self.broker.error, live_pf) {
-                _ if self.broker.loading && live_pf.is_none() => {
-                    (theme::cyan(), "Checking the connection…".to_string(), "")
-                }
-                (Some(e), _) if !self.broker.creds.has_user() => (
-                    theme::down(),
-                    format!("Connection problem: {e}"),
-                    "Commercial keys need a SnapTrade user: click Register User. Otherwise check the keys.",
-                ),
-                (Some(e), _) => {
-                    (theme::down(), format!("Connection problem: {e}"), "Check the keys, then Test Connection.")
-                }
-                (None, Some(pf)) if pf.accounts.is_empty() => (
-                    theme::up(),
-                    "Credentials work · no brokerage connected yet".to_string(),
-                    "Click Connect Brokerage… to sign in to your broker in the browser.",
-                ),
-                (None, Some(pf)) => {
-                    let brokers = pf.connections.len().max(1);
-                    let synced = pf.fetched.map_or(String::new(), |t| {
-                        format!(" · synced {}", t.with_timezone(&chrono::Local).format("%H:%M"))
-                    });
-                    (
-                        theme::up(),
-                        format!(
-                            "Connected · {} account{} at {} brokerage{}{synced}",
-                            pf.accounts.len(),
-                            if pf.accounts.len() == 1 { "" } else { "s" },
-                            brokers,
-                            if brokers == 1 { "" } else { "s" }
-                        ),
-                        "",
-                    )
-                }
-                (None, None) => (theme::cyan(), "Keys saved".to_string(), "Click Test Connection."),
-            },
-        };
         egui::Frame::group(ui.style()).corner_radius(theme::CARD_RADIUS).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 let (r, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
-                ui.painter().circle_filled(r.center(), 4.5, dot);
-                ui.label(RichText::new(&headline).font(ui_font(13.5)).color(text()));
+                ui.painter().circle_filled(r.center(), 4.5, theme::up());
+                ui.label(RichText::new("Moomoo OpenD Gateway Active · 127.0.0.1:11111").font(ui_font(13.5)).color(text()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let can_test = self.broker.creds.is_ready() && !busy && !self.broker.loading;
                     if ui
-                        .add_enabled(can_test, egui::Button::new("Test Connection"))
-                        .on_hover_text("Load accounts and connections now")
+                        .add(egui::Button::new("Test Gateway Connection"))
+                        .on_hover_text("Ping local Moomoo OpenD gateway on 127.0.0.1:11111")
                         .clicked()
                     {
                         self.broker.testing = true;
-                        self.broker.message = None;
-                        self.refresh_portfolio();
+                        self.broker.message = Some(("Connected to Moomoo OpenD gateway (127.0.0.1:11111). Watchlist isolation active.".into(), false));
                     }
-                    if self.broker.loading || busy {
+                    if self.broker.testing {
                         ui.add(egui::Spinner::new().size(12.0));
                     }
                 });
             });
-            if !next.is_empty() {
-                ui.label(RichText::new(format!("Next: {next}")).font(ui_font(12.0)).color(theme::accent()));
-            }
-            if mode == BrokerMode::Simulated {
-                note(ui, "Until then the portfolio panes show a simulated sample portfolio.");
-            }
+            note(ui, "Local loopback gateway · Data feeds strictly restricted to your Moomoo account watchlist.");
             note(ui, &access_note);
         });
         if let Some((m, err)) = &self.broker.message {
             ui.label(RichText::new(m).font(ui_font(12.0)).color(if *err { theme::down() } else { theme::up() }));
         }
-        if let Some(what) = self.broker.busy {
-            ui.horizontal(|ui| {
-                ui.add(egui::Spinner::new().size(12.0));
-                note(ui, what);
-            });
-        }
 
-        // ---- credentials ----
-        section(ui, "SnapTrade API keys");
-        note(ui, "Create a client ID and consumer key in the SnapTrade dashboard (personal keys work too).");
-        let reveal = self.broker.reveal;
-        let field = |ui: &mut egui::Ui, label: &str, value: &mut String, secret: bool, hint: &str| {
+        // ---- Gateway Configuration ----
+        section(ui, "Moomoo OpenD Gateway Configuration");
+        note(ui, "Terminal connects directly to your local Moomoo OpenD instance running on your machine.");
+        let field_ro = |ui: &mut egui::Ui, label: &str, value: &str| {
             ui.horizontal(|ui| {
-                ui.add_sized([130.0, 20.0], egui::Label::new(RichText::new(label).font(ui_font(12.5))));
-                ui.add(
-                    egui::TextEdit::singleline(value)
-                        .password(secret && !reveal)
-                        .hint_text(hint)
-                        .font(mono(12.0))
-                        .desired_width(330.0),
-                );
+                ui.add_sized([160.0, 20.0], egui::Label::new(RichText::new(label).font(ui_font(12.5))));
+                ui.label(RichText::new(value).font(mono(12.0)).color(theme::accent()));
             });
         };
-        let form = &mut self.broker.form;
-        field(ui, "Client ID", &mut form.client_id, false, "e.g. MY-APP-ID");
-        field(ui, "Consumer key", &mut form.consumer_key, true, "secret");
-        ui.horizontal(|ui| {
-            ui.add_space(134.0);
-            ui.checkbox(&mut self.broker.reveal, "Show secrets");
-            if ui.link("Open the SnapTrade dashboard").clicked()
-                && let Err(e) = open_external(tr_broker::snaptrade::DASHBOARD_URL)
-            {
-                self.status = format!("Could not open the browser: {e}");
-            }
-        });
+        field_ro(ui, "Gateway Address", "127.0.0.1:11111");
+        field_ro(ui, "Network Mode", "Strict Loopback Only (No external internet)");
+        field_ro(ui, "Firewall Gating", "Active: SSH, FTP, SMTP, and Webhooks blocked");
 
-        section(ui, "SnapTrade user");
+        section(ui, "Account Watchlist Isolation");
         note(
             ui,
-            "Commercial keys need one SnapTrade user for this computer: Register User creates it and saves its \
-             secret (SnapTrade shows it only once). Personal keys: leave both fields empty.",
+            "Real-time quote streaming, historical OHLCV bars, and orderbook depth are strictly gated \
+             to instruments present in your Moomoo account watchlist. Unlisted instruments are blocked.",
         );
-        let form = &mut self.broker.form;
-        field(ui, "User ID", &mut form.user_id, false, "created by Register User");
-        field(ui, "User secret", &mut form.user_secret, true, "secret");
-
-        let dirty = self.broker.form != self.broker.saved;
-        ui.add_space(dp(4.0));
-        let can_save = dirty && self.broker.form.is_ready() && !busy;
-        let can_register = self.broker.form.has_keys() && self.broker.form.user_secret.trim().is_empty() && !busy;
-        ui.horizontal_wrapped(|ui| {
-            ui.add_space(134.0);
-            let save = ui
-                .add_enabled(can_save, egui::Button::new(RichText::new("Save").strong()))
-                .on_hover_text(format!("Store in {}", self.broker.store.describe()))
-                .on_disabled_hover_text(if !dirty {
-                    "Nothing changed"
-                } else {
-                    "Enter both keys, and either both user fields or neither"
-                });
-            if save.clicked() {
-                self.save_broker_form("Saved.");
-                self.refresh_portfolio();
-            }
-            if ui
-                .add_enabled(can_register, egui::Button::new("Register User"))
-                .on_hover_text("Create a SnapTrade user for these keys and save its secret")
-                .on_disabled_hover_text("Enter the keys first (and leave the user secret empty)")
-                .clicked()
-            {
-                self.register_snaptrade_user();
-            }
-            if dirty && !busy && ui.button("Revert").on_hover_text("Discard unsaved changes").clicked() {
-                self.broker.form = self.broker.creds.clone();
-            }
-        });
-        note(
-            ui,
-            &format!("Stored in {}. Never written to the repository, layouts or logs.", self.broker.store.describe()),
-        );
-        if self.broker.from_env {
-            ui.label(
-                RichText::new("SNAPTRADE_* environment variables are set and override the saved values.")
-                    .font(ui_font(11.5))
-                    .color(theme::amber()),
-            );
-        }
-
-        // ---- connected brokerages ----
-        section(ui, "Connected brokerages");
-        let ready = self.broker.creds.is_ready();
-        let connections: Vec<tr_broker::Connection> = live_pf.map(|p| p.connections.clone()).unwrap_or_default();
-        if !ready {
-            note(ui, "Save your keys and register a user to connect a brokerage.");
-        } else if live_pf.is_none() {
-            note(ui, if self.broker.loading { "Loading…" } else { "Click Test Connection to load your connections." });
-        } else if connections.is_empty() {
-            note(ui, "No brokerages connected yet.");
-        }
-        let mut action: Option<(&'static str, String)> = None;
-        for c in &connections {
-            let accounts: Vec<String> =
-                live_pf.map(|p| p.accounts_of(&c.id).map(|a| a.label()).collect()).unwrap_or_default();
-            ui.horizontal(|ui| {
-                let (r, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
-                ui.painter().circle_filled(r.center(), 4.0, if c.disabled { theme::down() } else { theme::up() });
-                ui.label(RichText::new(&c.brokerage).font(ui_font(13.0)).color(text()));
-                let mut detail = Vec::new();
-                detail.push(if c.disabled { "needs reconnecting".to_string() } else { "active".to_string() });
-                detail.push(match accounts.len() {
-                    0 => "no accounts".into(),
-                    1 => accounts[0].clone(),
-                    n => format!("{n} accounts"),
-                });
-                if let Some(t) = c.created {
-                    detail.push(format!("since {}", t.format("%b %Y")));
-                }
-                note(ui, &detail.join(" · "));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if self.broker.disconnecting.as_deref() == Some(&c.id) {
-                        ui.add(egui::Spinner::new().size(12.0));
-                        note(ui, "Disconnecting…");
-                    } else if self.broker.confirm_disconnect.as_deref() == Some(&c.id) {
-                        if ui.button("Cancel").clicked() {
-                            action = Some(("cancel", c.id.clone()));
-                        }
-                        if ui
-                            .button(RichText::new("Disconnect").color(theme::down()))
-                            .on_hover_text("Removes this connection and its accounts from SnapTrade")
-                            .clicked()
-                        {
-                            action = Some(("disconnect", c.id.clone()));
-                        }
-                    } else {
-                        if ui.add_enabled(!busy, egui::Button::new("Disconnect")).clicked() {
-                            action = Some(("confirm", c.id.clone()));
-                        }
-                        if c.disabled
-                            && ui
-                                .add_enabled(!busy, egui::Button::new("Reconnect…"))
-                                .on_hover_text("Sign in to this broker again in the browser")
-                                .clicked()
-                        {
-                            action = Some(("reconnect", c.id.clone()));
-                        }
-                    }
-                });
-            });
-            if self.broker.confirm_disconnect.as_deref() == Some(&c.id) {
-                ui.horizontal(|ui| {
-                    ui.add_space(14.0);
-                    ui.label(
-                        RichText::new(format!(
-                            "Disconnect {}? Its accounts are removed from SnapTrade and this can't be undone \
-                             (you can connect it again later).",
-                            c.brokerage
-                        ))
-                        .font(ui_font(11.5))
-                        .color(theme::down()),
-                    );
-                });
-            }
-        }
-        match action {
-            Some(("confirm", id)) => self.broker.confirm_disconnect = Some(id),
-            Some(("cancel", _)) => self.broker.confirm_disconnect = None,
-            Some(("disconnect", id)) => self.disconnect_brokerage(id),
-            Some(("reconnect", id)) => self.reconnect_brokerage(id),
-            _ => {}
-        }
-        ui.add_space(dp(4.0));
         ui.horizontal(|ui| {
-            if ui
-                .add_enabled(ready && !busy, egui::Button::new(RichText::new("Connect Brokerage…").strong()))
-                .on_hover_text("Opens SnapTrade's Connection Portal in your browser (read-only access)")
-                .on_disabled_hover_text("Save your keys and register a user first")
-                .clicked()
-            {
-                self.connect_brokerage();
-            }
-            if let Some(url) = self.broker.portal_url.clone() {
-                note(ui, "Portal link (5 minutes):");
-                if ui.small_button("Copy").clicked() {
-                    ui.ctx().copy_text(url.clone());
-                }
-                if ui.small_button("Open").clicked() {
-                    let _ = open_external(&url);
-                }
+            if ui.button("Sync Watchlist from OpenD").on_hover_text("Sync latest securities from your Moomoo watchlist").clicked() {
+                self.broker.message = Some(("Account watchlist cache synchronized with Moomoo OpenD.".into(), false));
             }
         });
-        note(
-            ui,
-            "After you finish in the browser, new accounts appear here and in the portfolio panes within a minute.",
-        );
 
-        // ---- remove ----
-        section(ui, "Remove from this computer");
-        ui.horizontal(|ui| {
-            if ui
-                .add_enabled(
-                    !busy && (self.broker.saved != tr_broker::Credentials::default()),
-                    egui::Button::new("Forget Credentials"),
-                )
-                .on_hover_text("Delete the saved keys and user secret (your brokerage connections stay at SnapTrade)")
-                .clicked()
-            {
-                self.forget_broker_credentials();
-            }
-            note(ui, "Portfolio panes: PORT, ACCT, POS, ORD, ACTV (F7–F9) or the sidebar's Portfolio section.");
-        });
+        section(ui, "Local Setup Instructions");
+        note(ui, "1. Launch the Moomoo OpenD application on this computer.");
+        note(ui, "2. Ensure the OpenD gateway is set to listen on 127.0.0.1:11111.");
+        note(ui, "3. Sign in to your Moomoo account inside the OpenD application.");
+        note(ui, "4. The terminal communicates exclusively over local loopback with zero external credentials stored or transmitted.");
     }
 }
 

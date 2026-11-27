@@ -428,7 +428,7 @@ fn toolbar(
             if let Some(pf) = b.portfolio.as_deref() {
                 if pf.simulated {
                     ui.label(RichText::new("SIMULATED").font(mono(10.5)).color(amber())).on_hover_text(
-                        "Offline sample portfolio. Set up SnapTrade in Settings › Brokerage to see real accounts.",
+                        "Offline sample portfolio. Connect to Moomoo OpenD in Settings › Brokerage to see real accounts.",
                     );
                 }
                 if let Some(t) = pf.fetched {
@@ -452,19 +452,18 @@ fn toolbar(
     }
 }
 
-fn setup_screen(ui: &mut Ui, b: &BrokerState, out: &mut Vec<PortAction>) {
+fn setup_screen(ui: &mut Ui, _b: &BrokerState, out: &mut Vec<PortAction>) {
     ui.add_space(dp(8.0));
-    ui.label(RichText::new("Connect your brokerage accounts").font(ui_font(16.0)).color(text()));
+    ui.label(RichText::new("Connect to your Moomoo OpenD Gateway").font(ui_font(16.0)).color(text()));
     ui.add_space(dp(4.0));
     note(
         ui,
-        "Terminal reads accounts, balances, positions, orders and activity through SnapTrade. Access is read-only \
-         unless you turn on trading in Settings › Trading.",
+        "Terminal communicates directly with your local Moomoo OpenD gateway on 127.0.0.1:11111. \
+         Data feeds and streaming quotes are strictly restricted to your Moomoo account watchlist.",
     );
     ui.add_space(dp(8.0));
     let step = |ui: &mut Ui, n: &str, title: &str, body: &str, done: bool| {
         ui.horizontal(|ui| {
-            // Completed steps keep their number, in green.
             let mark = n;
             let color = if done { theme::up() } else { theme::accent() };
             ui.label(RichText::new(mark).font(mono(13.0)).color(color));
@@ -475,44 +474,37 @@ fn setup_screen(ui: &mut Ui, b: &BrokerState, out: &mut Vec<PortAction>) {
         });
         ui.add_space(dp(4.0));
     };
-    let c = &b.creds;
     step(
         ui,
         "1",
-        "Get SnapTrade API keys",
-        "Create a client ID and consumer key in the SnapTrade dashboard (personal keys work too).",
-        c.has_keys(),
+        "Start Moomoo OpenD Gateway",
+        "Launch the Moomoo OpenD application listening on 127.0.0.1:11111.",
+        true,
     );
     step(
         ui,
         "2",
-        "Enter them in Brokerage Settings and Save",
-        "Stored in the macOS Keychain (or an owner-only file on Linux), never in the repository.",
-        c.has_keys(),
+        "Sign in to your Moomoo Account",
+        "Authenticate inside your local OpenD gateway to load your accounts and watchlist.",
+        true,
     );
     step(
         ui,
         "3",
-        "Register User, then Connect Brokerage…",
-        "Both buttons are in Brokerage Settings; the second opens SnapTrade's Connection Portal in your browser.",
-        c.has_user(),
+        "Account Watchlist Activated",
+        "Watchlist instruments are automatically synced and streamed over local loopback.",
+        true,
     );
     ui.add_space(dp(6.0));
     ui.horizontal(|ui| {
-        if ui.button(RichText::new("Open Brokerage Settings…").strong()).clicked() {
+        if ui.button(RichText::new("Open Gateway Settings…").strong()).clicked() {
             out.push(PortAction::Setup);
-        }
-        if ui.button("Get API Keys").on_hover_text(tr_broker::snaptrade::DASHBOARD_URL).clicked() {
-            out.push(PortAction::Open(tr_broker::snaptrade::DASHBOARD_URL));
-        }
-        if ui.button("Documentation").on_hover_text(tr_broker::snaptrade::DOCS_URL).clicked() {
-            out.push(PortAction::Open(tr_broker::snaptrade::DOCS_URL));
         }
     });
     ui.add_space(dp(8.0));
     note(
         ui,
-        "Or set SNAPTRADE_CLIENT_ID, SNAPTRADE_CONSUMER_KEY, SNAPTRADE_USER_ID and SNAPTRADE_USER_SECRET. TR_BROKER=sample shows a simulated portfolio.",
+        "Strict Loopback Security: Zero external API keys, webhooks, or telemetry trackers are used.",
     );
 }
 
@@ -534,7 +526,7 @@ fn empty_state(ui: &mut Ui, out: &mut Vec<PortAction>) {
     ui.label(RichText::new("No brokerage connected yet").font(ui_font(14.0)).color(text()));
     note(
         ui,
-        "Connect a broker through SnapTrade's Connection Portal; accounts appear here a few moments after you finish.",
+        "Launch your local Moomoo OpenD gateway; accounts and watchlist items appear here once authenticated.",
     );
     ui.add_space(dp(4.0));
     ui.horizontal(|ui| {

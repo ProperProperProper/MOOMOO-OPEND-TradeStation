@@ -322,7 +322,7 @@ mod tests {
             cmd("OMON", "Option chain").keywords("options chain"),
             cmd("SMA 50", "Toggle SMA 50"),
             Item::new(Kind::Theme, "Nord", "Dark theme", Target::Run("THEME Nord".into())),
-            Item::new(Kind::Settings, "Settings › Brokerage", "SnapTrade keys", Target::Settings("Brokerage".into())),
+            Item::new(Kind::Settings, "Settings › Brokerage", "Moomoo OpenD Gateway & Watchlist", Target::Settings("Brokerage".into())),
             Item::new(Kind::Action, "Move sidebar to the other side", "", Target::Hotkey(Action::SwapSidebarSide)),
             Item::new(Kind::Ticker, "AAPL US Equity", "Apple Inc", Target::Run("AAPL US Equity".into()))
                 .keywords("Apple Inc"),
