@@ -248,6 +248,82 @@ impl OpenDProtoSession {
         Ok(symbols)
     }
 
+    /// Subscribes and fetches basic quotes for symbols (ProtoID 3001 Qot_Sub, ProtoID 3004 Qot_GetBasicQot)
+    pub async fn get_quotes(&mut self, symbols: &[String]) -> Result<Vec<crate::Quote>> {
+        if symbols.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let sec_list: Vec<serde_json::Value> = symbols
+            .iter()
+            .map(|s| {
+                let code = crate::clean_ticker(s);
+                serde_json::json!({
+                    "market": 11, // US
+                    "code": code
+                })
+            })
+            .collect();
+
+        // 1. Subscribe to QUOTE (subtype 1)
+        let sub_req = serde_json::json!({
+            "c2s": {
+                "securityList": sec_list,
+                "subTypeList": [1],
+                "isSubOrUnSub": true,
+                "isFirstPush": false
+            }
+        });
+        let _ = self.query(3001, &sub_req).await;
+
+        // 2. Fetch basic quotes (ProtoID 3004)
+        let quote_req = serde_json::json!({
+            "c2s": {
+                "securityList": sec_list
+            }
+        });
+        let res = self.query(3004, &quote_req).await?;
+        let ret_type = res.get("retType").and_then(|v| v.as_i64()).unwrap_or(-1);
+        if ret_type != 0 {
+            let msg = res.get("retMsg").and_then(|v| v.as_str()).unwrap_or("unknown error");
+            bail!("Qot_GetBasicQot error: {msg}");
+        }
+
+        let mut quotes = Vec::new();
+        if let Some(list) = res.pointer("/s2c/basicQotList").and_then(|v| v.as_array()) {
+            for item in list {
+                let code = item.pointer("/security/code")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                if code.is_empty() {
+                    continue;
+                }
+                let last = item.get("curPrice").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let prev_close = item.get("lastClosePrice").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let high = item.get("highPrice").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let low = item.get("lowPrice").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let volume = item.get("volume")
+                    .and_then(|v| v.as_str().and_then(|s| s.parse::<u64>().ok()).or_else(|| v.as_u64()))
+                    .unwrap_or(0);
+                let timestamp = item.get("updateTimestamp")
+                    .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
+                    .unwrap_or_else(|| chrono::Utc::now().timestamp());
+
+                quotes.push(crate::Quote {
+                    symbol: code,
+                    last,
+                    prev_close,
+                    high,
+                    low,
+                    volume,
+                    timestamp,
+                });
+            }
+        }
+        Ok(quotes)
+    }
+
     /// Fetches 1-minute historical candlestick bars from OpenD (ProtoID 3103: Qot_RequestHistoryKL)
     /// market 11 = US Equities. klType 1 = 1-minute. rehabType 1 = forward adjusted.
     pub async fn get_1min_history(&mut self, symbol: &str, limit: usize) -> Result<Vec<crate::Bar>> {

@@ -92,7 +92,8 @@ impl MarketData for Markets {
     }
 
     async fn quotes(&self, symbols: &[String]) -> Result<Vec<Quote>> {
-        let mut out = Vec::new();
+        let mut key_by_ticker: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        let mut tickers = Vec::new();
         for key in symbols {
             let sec = security(key);
             if sec.class == AssetClass::Perp {
@@ -100,16 +101,30 @@ impl MarketData for Markets {
             }
             // Strictly fetch only if the instrument is in the user's Moomoo account watchlist
             if self.moomoo.is_in_watchlist(&sec.ticker).await {
-                if let Ok(q) = self.moomoo.fetch_quote(&sec.ticker).await {
-                    out.push(Quote {
-                        symbol: key.clone(),
-                        last: q.last,
-                        prev_close: q.prev_close,
-                        ts: q.timestamp,
-                        spark: vec![q.prev_close, q.low, q.high, q.last],
-                    });
-                }
+                key_by_ticker.insert(sec.ticker.clone(), key.clone());
+                key_by_ticker.insert(format!("US.{}", sec.ticker), key.clone());
+                key_by_ticker.insert(clean_ticker(key), key.clone());
+                tickers.push(sec.ticker);
             }
+        }
+        if tickers.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let m_quotes = self.moomoo.fetch_quotes(&tickers).await.unwrap_or_default();
+        let mut out = Vec::new();
+        for q in m_quotes {
+            let sym_key = key_by_ticker.get(&q.symbol)
+                .or_else(|| key_by_ticker.get(&clean_ticker(&q.symbol)))
+                .cloned()
+                .unwrap_or_else(|| q.symbol.clone());
+            out.push(Quote {
+                symbol: sym_key,
+                last: q.last,
+                prev_close: q.prev_close,
+                ts: q.timestamp,
+                spark: vec![q.prev_close, q.low, q.high, q.last],
+            });
         }
         Ok(out)
     }

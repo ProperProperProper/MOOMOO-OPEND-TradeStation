@@ -382,41 +382,51 @@ impl OpenDClient {
             bail!(msg);
         }
 
-        let url = format!("http://{}/api/v1/quote?symbol={}", self.addr, ticker);
-        validate_loopback_only(&url)?;
-
-        if let Ok(resp) = self.http_client.get(&url).send().await {
-            if resp.status().is_success() {
-                if let Ok(q) = resp.json::<Quote>().await {
-                    return Ok(q);
-                }
-            }
-        }
-
-        // Return local quote when OpenD has not yet populated ticks
-        let now = chrono::Utc::now().timestamp();
-        Ok(Quote {
-            symbol: ticker,
-            last: 150.0,
-            prev_close: 148.5,
-            high: 152.0,
-            low: 147.5,
-            volume: 1_000_000,
-            timestamp: now,
-        })
+        let quotes = self.fetch_quotes(&[symbol.to_string()]).await?;
+        quotes.into_iter().next().ok_or_else(|| anyhow::anyhow!("No live quote available for '{symbol}'"))
     }
 
     /// Fetches quotes for multiple symbols strictly filtering to those in the Moomoo watchlist.
     pub async fn fetch_quotes(&self, symbols: &[String]) -> Result<Vec<Quote>> {
-        let mut out = Vec::new();
+        let mut valid_symbols = Vec::new();
         for sym in symbols {
-            if self.is_in_watchlist(sym).await {
-                if let Ok(q) = self.fetch_quote(sym).await {
-                    out.push(q);
+            let ticker = clean_ticker(sym);
+            if self.is_in_watchlist(&ticker).await {
+                valid_symbols.push(ticker);
+            }
+        }
+        if valid_symbols.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // 1. Try direct OpenD native protocol (ProtoID 3001 & 3004)
+        if let Ok(mut session) = OpenDProtoSession::connect(&self.addr).await {
+            if let Ok(quotes) = session.get_quotes(&valid_symbols).await {
+                if !quotes.is_empty() {
+                    return Ok(quotes);
                 }
             }
         }
-        Ok(out)
+
+        // 2. Try HTTP endpoint if available
+        let mut out = Vec::new();
+        for ticker in &valid_symbols {
+            let url = format!("http://{}/api/v1/quote?symbol={}", self.addr, ticker);
+            if validate_loopback_only(&url).is_ok() {
+                if let Ok(resp) = self.http_client.get(&url).send().await {
+                    if resp.status().is_success() {
+                        if let Ok(q) = resp.json::<Quote>().await {
+                            out.push(q);
+                        }
+                    }
+                }
+            }
+        }
+        if !out.is_empty() {
+            return Ok(out);
+        }
+
+        bail!("Could not retrieve live quotes from OpenD for {:?}", valid_symbols)
     }
 
     /// Fetches 1-minute historical candlestick bars strictly if symbol is in the Moomoo account watchlist.
@@ -449,20 +459,7 @@ impl OpenDClient {
             }
         }
 
-        let now = chrono::Utc::now().timestamp();
-        let mut bars = Vec::with_capacity(limit);
-        for i in (0..limit).rev() {
-            let ts = now - (i as i64) * 60;
-            bars.push(Bar {
-                ts,
-                open: 150.0,
-                high: 153.0,
-                low: 149.0,
-                close: 151.5,
-                volume: 50_000.0,
-            });
-        }
-        Ok(bars)
+        bail!("Could not retrieve 1min bars from OpenD for '{ticker}'");
     }
 
     /// Fetches historical bars strictly if symbol is in the Moomoo account watchlist.
