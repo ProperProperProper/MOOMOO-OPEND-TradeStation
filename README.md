@@ -21,6 +21,8 @@ A fast, keyboard-driven market terminal in pure Rust: GPU charting with a Bloomb
 * **Zero Telemetry & No Auto-Updater**: Sparkle updater and all update commands have been permanently excised. The app has zero phone-home or analytics telemetry.
 * **Zero Keys in Git**: No account passwords, API secret keys, or tokens are stored or committed to the repository. Authentication is handled locally by your OpenD daemon.
 
+> 📖 **Full Security Documentation**: See [SECURITY.md](SECURITY.md) and [docs/SECURITY_AUDIT_AND_HARDENING_REPORT.md](docs/SECURITY_AUDIT_AND_HARDENING_REPORT.md) for full phase-by-phase auditing, firewall architecture, and policy specifications.
+
 ---
 
 ## Features
