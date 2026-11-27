@@ -31,6 +31,14 @@ pub fn validate_loopback_only(addr_str: &str) -> Result<()> {
         }
     }
 
+    // 2. Prohibit webhooks and external notification pushers
+    if lower.contains("webhook") || lower.contains("/hooks/") || lower.contains("discord.com/api") || lower.contains("slack.com/services") {
+        let msg = format!("⚠️ SECURITY ALERT: Webhooks are strictly forbidden. Attempted target: '{addr_str}'. Notifications must be strictly on desktop or in-app.");
+        eprintln!("{msg}");
+        error!("{msg}");
+        bail!(msg);
+    }
+
     // Strip allowed protocols for host/port parsing
     let host_port = addr_str
         .trim_start_matches("http://")
@@ -374,6 +382,11 @@ mod tests {
         assert!(validate_loopback_only("https://api.snaptrade.com").is_err());
         assert!(validate_loopback_only("https://query1.finance.yahoo.com").is_err());
         assert!(validate_loopback_only("https://www.tradingview.com").is_err());
+
+        // Webhook URLs must be strictly blocked
+        assert!(validate_loopback_only("https://discord.com/api/webhooks/123/xyz").is_err());
+        assert!(validate_loopback_only("https://hooks.slack.com/services/123").is_err());
+        assert!(validate_loopback_only("http://127.0.0.1:11111/webhook").is_err());
     }
 
     #[tokio::test]
