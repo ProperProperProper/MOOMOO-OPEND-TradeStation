@@ -13,7 +13,8 @@ pub const DEFAULT_OPEND_ADDR: &str = "127.0.0.1:11111";
 /// and does NOT use prohibited protocols (SSH, FTP, SMTP/email, Telnet, etc.).
 /// Logs a prominent security warning whenever an unauthorized connection attempt is made.
 pub fn validate_loopback_only(addr_str: &str) -> Result<()> {
-    let lower = addr_str.to_ascii_lowercase();
+    let trimmed = addr_str.trim();
+    let lower = trimmed.to_ascii_lowercase();
 
     // 1. Prohibit disallowed schemes/protocols (SSH, FTP, Email, Telnet)
     let prohibited_schemes = [
@@ -39,40 +40,48 @@ pub fn validate_loopback_only(addr_str: &str) -> Result<()> {
         bail!(msg);
     }
 
-    // Strip allowed protocols for host/port parsing
-    let host_port = addr_str
-        .trim_start_matches("http://")
-        .trim_start_matches("https://")
-        .trim_start_matches("ws://")
-        .trim_start_matches("wss://")
-        .trim_start_matches("tcp://");
-
-    let (host, port_str) = match host_port.split_once(':') {
-        Some((h, p)) => (h, Some(p.split('/').next().unwrap_or(p))),
-        None => (host_port.split('/').next().unwrap_or(host_port), None),
+    // 3. Robust URL and host:port parsing
+    let url_to_parse = if lower.contains("://") {
+        trimmed.to_string()
+    } else {
+        format!("http://{trimmed}")
     };
 
-    // 2. Prohibit well-known remote management & email ports
-    if let Some(p_str) = port_str {
-        if let Ok(port) = p_str.parse::<u16>() {
-            let prohibited_ports = [
-                20, 21,       // FTP
-                22,           // SSH
-                23,           // Telnet
-                25, 465, 587, // SMTP / Email
-                110, 995,     // POP3
-                143, 993,     // IMAP
-            ];
-            if prohibited_ports.contains(&port) {
-                let msg = format!("⚠️ SECURITY ALERT: Prohibited port {port} blocked in '{addr_str}'. SSH, FTP, and email ports are strictly prohibited.");
-                eprintln!("{msg}");
-                error!("{msg}");
-                bail!(msg);
-            }
+    let parsed_url = url::Url::parse(&url_to_parse)
+        .map_err(|e| anyhow::anyhow!("⚠️ SECURITY ALERT: Malformed target address '{addr_str}': {e}"))?;
+
+    // Reject userinfo (e.g. user:pass@...) to prevent credential exfiltration or URL spoofing
+    if !parsed_url.username().is_empty() || parsed_url.password().is_some() {
+        let msg = format!("⚠️ SECURITY ALERT: URLs containing embedded credentials are blocked: '{addr_str}'");
+        eprintln!("{msg}");
+        error!("{msg}");
+        bail!(msg);
+    }
+
+    let host = parsed_url.host_str()
+        .ok_or_else(|| anyhow::anyhow!("⚠️ SECURITY ALERT: Missing host in '{addr_str}'"))?;
+
+    let port = parsed_url.port();
+
+    // 4. Prohibit well-known remote management & email ports
+    if let Some(p) = port {
+        let prohibited_ports = [
+            20, 21,       // FTP
+            22,           // SSH
+            23,           // Telnet
+            25, 465, 587, // SMTP / Email
+            110, 995,     // POP3
+            143, 993,     // IMAP
+        ];
+        if prohibited_ports.contains(&p) {
+            let msg = format!("⚠️ SECURITY ALERT: Prohibited port {p} blocked in '{addr_str}'. SSH, FTP, and email ports are strictly prohibited.");
+            eprintln!("{msg}");
+            error!("{msg}");
+            bail!(msg);
         }
     }
 
-    // 3. Strict loopback verification
+    // 5. Strict loopback verification
     if host.eq_ignore_ascii_case("localhost") {
         return Ok(());
     }
@@ -132,10 +141,18 @@ pub struct Bar {
     pub volume: f64,
 }
 
-/// Normalizes ticker for case-insensitive watchlist matching (e.g. "AAPL", "AAPL US Equity").
+/// Normalizes ticker for case-insensitive watchlist matching.
+/// Handles raw tickers ("AAPL"), Bloomberg keys ("AAPL US Equity"),
+/// and Moomoo market-prefixed tickers ("US.AAPL", "HK.00700").
 pub fn clean_ticker(s: &str) -> String {
     let base = s.split_whitespace().next().unwrap_or(s);
-    base.trim().to_uppercase()
+    let trimmed = base.trim().to_uppercase();
+    for prefix in ["US.", "HK.", "SH.", "SZ.", "SG.", "JP.", "AU."] {
+        if let Some(stripped) = trimmed.strip_prefix(prefix) {
+            return stripped.to_string();
+        }
+    }
+    trimmed
 }
 
 /// Moomoo OpenD Client with strict Watchlist-Only enforcement.
@@ -217,8 +234,12 @@ impl OpenDClient {
             ];
         }
 
-        // Cache the watchlist set for fast enforcement
-        let set: HashSet<String> = symbols.iter().map(|s| clean_ticker(s)).collect();
+        // Cache both normalized ticker ("AAPL") and raw ticker ("US.AAPL") for fast enforcement
+        let mut set = HashSet::new();
+        for sym in &symbols {
+            set.insert(clean_ticker(sym));
+            set.insert(sym.trim().to_uppercase());
+        }
         let mut guard = self.cached_watchlist.write().await;
         *guard = Some(set);
 
@@ -228,19 +249,20 @@ impl OpenDClient {
     /// Validates whether a ticker is in the user's Moomoo account watchlist.
     pub async fn is_in_watchlist(&self, symbol: &str) -> bool {
         let ticker = clean_ticker(symbol);
+        let upper = symbol.trim().to_uppercase();
 
         // Check cache first
         {
             let guard = self.cached_watchlist.read().await;
             if let Some(set) = &*guard {
-                return set.contains(&ticker);
+                return set.contains(&ticker) || set.contains(&upper);
             }
         }
 
         // Populate cache if empty
         let _ = self.fetch_watchlist().await;
         let guard = self.cached_watchlist.read().await;
-        guard.as_ref().is_some_and(|set| set.contains(&ticker))
+        guard.as_ref().is_some_and(|set| set.contains(&ticker) || set.contains(&upper))
     }
 
     /// Fetches quote data strictly if the symbol is in the user's Moomoo account watchlist.
@@ -329,8 +351,22 @@ impl OpenDClient {
 
     /// Subscribes to streaming quotes strictly for watchlist symbols.
     pub fn subscribe_quotes(&self, symbol: &str) -> Option<mpsc::Receiver<Quote>> {
-        let (tx, rx) = mpsc::channel(100);
         let sym = clean_ticker(symbol);
+        let upper = symbol.trim().to_uppercase();
+
+        // Synchronous check against cached watchlist if available
+        if let Ok(guard) = self.cached_watchlist.try_read() {
+            if let Some(set) = &*guard {
+                if !set.contains(&sym) && !set.contains(&upper) {
+                    let msg = format!("⚠️ SECURITY ALERT: Rejected streaming subscription for '{symbol}': symbol is NOT in your Moomoo account watchlist.");
+                    eprintln!("{msg}");
+                    warn!("{msg}");
+                    return None;
+                }
+            }
+        }
+
+        let (tx, rx) = mpsc::channel(100);
         let client = self.clone();
 
         tokio::spawn(async move {
@@ -365,18 +401,27 @@ mod tests {
         assert!(validate_loopback_only("127.0.0.1:11111").is_ok());
         assert!(validate_loopback_only("localhost:11111").is_ok());
         assert!(validate_loopback_only("http://127.0.0.1:11111/test").is_ok());
+        assert!(validate_loopback_only("HTTP://127.0.0.1:11111/test").is_ok());
+        assert!(validate_loopback_only("http://[::1]:11111").is_ok());
+        assert!(validate_loopback_only("[::1]:11111").is_ok());
 
+        // Prohibited schemes
         assert!(validate_loopback_only("ssh://127.0.0.1:22").is_err());
         assert!(validate_loopback_only("sftp://127.0.0.1").is_err());
         assert!(validate_loopback_only("ftp://127.0.0.1:21").is_err());
         assert!(validate_loopback_only("smtp://127.0.0.1:25").is_err());
         assert!(validate_loopback_only("mailto:trader@example.com").is_err());
 
+        // Prohibited ports
         assert!(validate_loopback_only("127.0.0.1:22").is_err());
         assert!(validate_loopback_only("127.0.0.1:21").is_err());
         assert!(validate_loopback_only("127.0.0.1:25").is_err());
         assert!(validate_loopback_only("127.0.0.1:587").is_err());
 
+        // Embedded credentials rejection
+        assert!(validate_loopback_only("http://user:secret@127.0.0.1:11111").is_err());
+
+        // External endpoints
         assert!(validate_loopback_only("8.8.8.8:80").is_err());
         assert!(validate_loopback_only("https://api.binance.com").is_err());
         assert!(validate_loopback_only("https://api.snaptrade.com").is_err());
@@ -397,10 +442,14 @@ mod tests {
 
         // Watchlist symbol succeeds
         assert!(client.is_in_watchlist("AAPL").await);
+        assert!(client.is_in_watchlist("US.AAPL").await);
+        assert!(client.is_in_watchlist("AAPL US Equity").await);
         assert!(client.fetch_quote("AAPL").await.is_ok());
+        assert!(client.fetch_quote("US.AAPL").await.is_ok());
 
         // Non-watchlist symbol MUST be blocked
         assert!(!client.is_in_watchlist("UNKNOWN_COIN").await);
         assert!(client.fetch_quote("UNKNOWN_COIN").await.is_err());
+        assert!(client.subscribe_quotes("UNKNOWN_COIN").is_none());
     }
 }

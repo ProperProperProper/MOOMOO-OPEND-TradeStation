@@ -136,7 +136,22 @@ In accordance with the zero-leak, privacy-first mandate:
 
 ---
 
-## 6. Repository Provenance
+## 6. Security Framework Diagnostics & Function Fixes
+
+During line-by-line inspection, the security framework functions in `crates/moomoo` were audited and hardened against subtle operational failures:
+1. **RFC-Compliant URL & Loopback Validation (`validate_loopback_only`)**:
+   * *Issue Identified*: Naive string splitting on `:` failed on IPv6 loopback addresses (`[::1]:11111` or `::1`) due to multiple colons, and could miss uppercase scheme variants (`HTTP://`, `WS://`).
+   * *Fix Applied*: Replaced ad-hoc string slicing with the robust `url` crate parser (`url::Url::parse`). Added support for IPv4 and IPv6 loopbacks, case-insensitive scheme matching, and active rejection of embedded credentials (`user:pass@host`).
+2. **Moomoo Market Prefix & Bloomberg Suffix Normalization (`clean_ticker`)**:
+   * *Issue Identified*: OpenD returns securities formatted with exchange prefixes (`US.AAPL`, `HK.00700`), whereas terminal search and Bloomberg-style tickets use suffixes (`AAPL US Equity`). Raw string comparison caused watchlist lookup misses.
+   * *Fix Applied*: Enhanced `clean_ticker` to strip standard exchange prefixes (`US.`, `HK.`, `SH.`, `SZ.`, `SG.`, `JP.`, `AU.`) and suffix qualifiers (`US Equity`), while indexing both canonical (`AAPL`) and raw (`US.AAPL`) symbols in `cached_watchlist`.
+3. **Immediate Gating on Live Subscriptions (`subscribe_quotes`)**:
+   * *Issue Identified*: Asynchronous checks inside background tasks returned active channels for unlisted tickers before dropping them.
+   * *Fix Applied*: Added immediate synchronous check against `cached_watchlist`, rejecting unlisted instruments with `None` immediately.
+
+---
+
+## 7. Repository Provenance
 
 * **Repository**: [https://github.com/ProperProperProper/MOOMOO-OPEND-TradeStation](https://github.com/ProperProperProper/MOOMOO-OPEND-TradeStation)
 * **Default Branch**: `master`
@@ -147,3 +162,4 @@ In accordance with the zero-leak, privacy-first mandate:
   * `335500d`: Initial SECURITY.md committed.
   * `e2ead6c`: Added SECURITY_AUDIT_AND_HARDENING_REPORT.md to docs/.
   * `bb2b6a7`: Added prominent security policy links to README.md.
+  * `0744cad`: Line-by-line inspection, hardened loopback addresses, removed dead pipelines and VM deploy scripts.
