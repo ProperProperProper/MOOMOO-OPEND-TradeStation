@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/broker", "crates/hl", "crates/turnkey", "crates/congress", "crates/data", "crates/chart", "crates/macos", "crates/proto", "app", "server"]
+members = ["crates/core", "crates/broker", "crates/hl", "crates/turnkey", "crates/congress", "crates/data", "crates/chart", "crates/macos", "crates/proto", "crates/moomoo", "app", "server"]
 default-members = ["app"]
 
 [workspace.package]
