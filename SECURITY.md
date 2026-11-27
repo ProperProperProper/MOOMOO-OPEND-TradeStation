@@ -151,7 +151,39 @@ During line-by-line inspection, the security framework functions in `crates/moom
 
 ---
 
-## 7. Repository Provenance
+## 7. Native Rust Build & Automation Transition (`xtask`)
+
+In accordance with the pure native Rust directive:
+* **Created Native `xtask` Workspace Crate**: Built [`xtask/`](file:///Users/local.local/Projects/TradeStation_repo/xtask) providing standard `cargo xtask` subcommands:
+  * `cargo xtask bundle-macos`: Natively constructs macOS `.app` bundles, injects Retina/macOS permissions, generates `Info.plist`, and copies ICNS assets.
+  * `cargo xtask release-macos`: Native release packaging, code signing, and DMG generation.
+  * `cargo xtask build-icon`: Asset validation and rasterization.
+  * `cargo xtask check-cross`: Cross-compilation linting.
+  * `cargo xtask build-web`: Browser wasm bundling.
+* **Shell Script Modernization**: Converted all scripts in `scripts/` into lightweight forwarders delegating directly to `cargo xtask`.
+
+---
+
+## 8. GitHub Repository Security Configuration
+
+The GitHub remote repository (`ProperProperProper/MOOMOO-OPEND-TradeStation`) has been hardened with enterprise-grade public repository safeguards:
+1. **Branch Protection Enforced on `master`**:
+   * `allow_force_pushes = false`: Prevents rewriting or overwriting repository git history.
+   * `allow_deletions = false`: Prevents accidental or unauthorized deletion of the default branch.
+   * `required_linear_history = true`: Enforces a clean, audit-friendly, linear commit graph.
+   * `required_conversation_resolution = true`: Requires all discussion threads to be resolved before merging.
+   * `delete_branch_on_merge = true`: Automatically purges stale feature branches.
+2. **Secret Scanning & Push Protection**:
+   * Active secret scanning enabled across all branches and commits.
+   * Push protection blocks any commits containing API tokens, private keys, or passwords before they can reach the server.
+3. **Automated Vulnerability Management**:
+   * Dependabot alerts and automated security updates enabled.
+   * Private vulnerability reporting activated.
+   * **Zero Known Vulnerabilities**: Audited and patched upstream security advisories across all crates (`zip` v9.8.2, `rustls` v0.23.46, `@sveltejs/kit` v3.1.1).
+
+---
+
+## 9. Repository Provenance
 
 * **Repository**: [https://github.com/ProperProperProper/MOOMOO-OPEND-TradeStation](https://github.com/ProperProperProper/MOOMOO-OPEND-TradeStation)
 * **Default Branch**: `master`
@@ -163,3 +195,8 @@ During line-by-line inspection, the security framework functions in `crates/moom
   * `e2ead6c`: Added SECURITY_AUDIT_AND_HARDENING_REPORT.md to docs/.
   * `bb2b6a7`: Added prominent security policy links to README.md.
   * `0744cad`: Line-by-line inspection, hardened loopback addresses, removed dead pipelines and VM deploy scripts.
+  * `2e7594b`: Fix(security): harden loopback validation, normalize market ticker prefixes, and update security documentation.
+  * `77bdffa`: Feat: migrate build scripts to native Rust xtask crate and configure cargo xtask.
+  * `366fdb8`: Fix(security): update zip crate from v9.0.2 to v9.8.2 patching critical RCE vulnerability.
+  * `d86234d`: Fix(security): update rustls to v0.23.46 fixing TLS session key debug exposure.
+  * `c257ab3`: Fix(security): update @sveltejs/kit to ^3.1.1 resolving SvelteKit advisory.
