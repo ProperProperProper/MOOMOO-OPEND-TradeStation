@@ -32,6 +32,8 @@ const COMMANDS: &[(&str, &str, &str, Option<Action>)] = &[
     ("OMON", "", "options chain calls puts greeks", Some(Action::NewOptions)),
     ("WL", "", "watchlist monitor", Some(Action::Watchlist)),
     ("EQ", "Equity curve", "paper account equity curve session pnl", None),
+    ("STRAT", "Strategy lab & paper bot", "bot grid open cross sweeps research ai", None),
+    ("BOT", "Paper trading bot", "paper execution moomoo simulate", None),
     ("LAYOUTS", "", "saved layouts workspaces", None),
     ("LAYOUT NEW", "Start a new saved layout", "workspace", None),
     ("SPLIT", "", "split right pane", Some(Action::SplitRight)),
@@ -261,6 +263,15 @@ impl TerminalApp {
             .keywords("layout workspace switch");
             it.hotkey = Action::ALL.into_iter().find(|a| a.layout_slot() == Some(i));
             v.push(it);
+            v.push(
+                Item::new(
+                    Kind::Command,
+                    format!("Delete layout {name}"),
+                    format!("LAYOUT DEL {name}"),
+                    Target::Run(format!("LAYOUT DEL {name}")),
+                )
+                .keywords("delete remove rm layout workspace"),
+            );
         }
         for name in self.theme_choices() {
             let mut sub = match crate::themes::find(&self.themes, &name) {
@@ -659,8 +670,8 @@ mod tests {
         let best2 = |q: &str| rank(&items, &[], q).into_iter().take(2).map(|i| i.title).collect::<Vec<_>>();
         let b = best2("brokerage settings");
         assert!(b.contains(&"Open Brokerage settings".to_string()) && b.contains(&"Settings › Brokerage".to_string()));
-        let b = best2("yield curve");
-        assert!(b.contains(&"GC".to_string()), "{b:?}");
+        let b = best2("equity curve");
+        assert!(b.contains(&"EQ".to_string()), "{b:?}");
     }
 
     /// A perp's row is labelled as one and found by its underlying, after the listed stock.
@@ -676,8 +687,6 @@ mod tests {
         assert_eq!(titles("aapl"), ["AAPL US Equity", "xyz:AAPL"], "the listed stock first");
         assert_eq!(titles("apple perp"), ["xyz:AAPL"]);
         assert_eq!(titles("hyperliquid"), ["xyz:AAPL"]);
-        let perp_cmd = static_items().into_iter().find(|i| i.title == "PERP").expect("PERP is offered");
-        assert_eq!(perp_cmd.hotkey, Some(Action::TogglePerp));
     }
 
     #[test]

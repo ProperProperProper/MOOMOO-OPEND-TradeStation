@@ -25,6 +25,8 @@ pub enum Action {
     LinkedSymbol(crate::layouts::Link, String),
     /// Run a command line (`AAPL OMON`, `PORT REFRESH`) without adding it to the history.
     Command(String),
+    /// Open a security chart with a specific timeframe and show winning strategy buy/sell markers.
+    ShowStratChart(String, tr_core::Timeframe),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

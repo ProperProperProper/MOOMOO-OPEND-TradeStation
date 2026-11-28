@@ -77,6 +77,8 @@ pub enum PaneKind {
     Help,
     Wei,
     Curve,
+    Strategy(Box<crate::strategy_view::StrategyPaneState>),
+    Backtest(Box<crate::backtest_view::BacktestPaneState>),
     Search {
         query: String,
     },
@@ -223,6 +225,8 @@ impl PaneKind {
             PaneKind::Help => "Help".into(),
             PaneKind::Wei => "World Markets".into(),
             PaneKind::Curve => "Equity Curve".into(),
+            PaneKind::Strategy(s) => format!("{} Strategy", short(&s.symbol)),
+            PaneKind::Backtest(b) => format!("{} Backtest (★ {}m)", short(&b.symbol), b.interval),
             PaneKind::Search { query } if query.is_empty() => "Search".into(),
             PaneKind::Search { query } => format!("Search: {query}"),
             PaneKind::News(n) => match &n.symbol {
@@ -247,6 +251,8 @@ impl PaneKind {
             PaneKind::Help => "HELP",
             PaneKind::Wei => "WEI",
             PaneKind::Curve => "EQ",
+            PaneKind::Strategy(_) => "STRAT",
+            PaneKind::Backtest(_) => "BT",
             PaneKind::Search { .. } => "SECF",
             PaneKind::News(_) => "CN",
             PaneKind::OrderBook(_) => "OB",
@@ -264,6 +270,8 @@ impl PaneKind {
             PaneKind::News(n) => n.symbol.as_deref(),
             PaneKind::OrderBook(b) => Some(&b.symbol),
             PaneKind::Options(o) => Some(&o.symbol),
+            PaneKind::Strategy(s) => Some(&s.symbol),
+            PaneKind::Backtest(b) => Some(&b.symbol),
             _ => None,
         }
     }
@@ -276,6 +284,7 @@ impl PaneKind {
                 | PaneKind::News(_)
                 | PaneKind::OrderBook(_)
                 | PaneKind::Options(_)
+                | PaneKind::Strategy(_)
         )
     }
 
@@ -304,6 +313,8 @@ impl PaneKind {
             PaneKind::Help => PaneSettings::Help,
             PaneKind::Wei => PaneSettings::Wei,
             PaneKind::Curve => PaneSettings::Curve,
+            PaneKind::Strategy(s) => PaneSettings::Strategy(s.symbol.clone()),
+            PaneKind::Backtest(b) => PaneSettings::Backtest { symbol: b.symbol.clone(), tf: b.tf },
             PaneKind::Search { query } => PaneSettings::Search(query.clone()),
             PaneKind::News(n) => PaneSettings::News(n.symbol.clone()),
             PaneKind::OrderBook(b) => {
@@ -357,6 +368,8 @@ impl PaneKind {
             PaneSettings::Help => PaneKind::Help,
             PaneSettings::Wei => PaneKind::Wei,
             PaneSettings::Curve => PaneKind::Curve,
+            PaneSettings::Strategy(s) => PaneKind::Strategy(Box::new(crate::strategy_view::StrategyPaneState::new(&s))),
+            PaneSettings::Backtest { symbol, tf } => PaneKind::Backtest(Box::new(crate::backtest_view::BacktestPaneState::new(0, &symbol, tf))),
             PaneSettings::Search(q) => PaneKind::Search { query: q },
             PaneSettings::News(s) => PaneKind::News(Box::new(NewsPane::new(s))),
             PaneSettings::OrderBook { symbol, depth, group } => {
@@ -473,8 +486,8 @@ pub struct TerminalApp {
     layout_name: String,
     layout_names: Vec<String>,
     last_saved: Vec<u8>,
-    /// Layout being renamed in the sidebar: old name and edit buffer.
-    renaming_layout: Option<(String, String)>,
+    /// Layout being renamed in the sidebar: old name, edit buffer, and needs_focus flag.
+    renaming_layout: Option<(String, String, bool)>,
 
     prefs: Prefs,
     /// Built-in and custom themes, and the theme last applied to egui.
@@ -794,7 +807,12 @@ impl TerminalApp {
     fn run_actions(&mut self, actions: Vec<Action>) {
         for a in actions {
             match a {
-                Action::OpenChart(s) => self.open_security(&s),
+                Action::OpenChart(s) => {
+                    self.open_security(&s);
+                    self.with_chart(|c, _| {
+                        c.show_strategy_markers = false;
+                    });
+                }
                 Action::OpenTicker(s) => {
                     self.open_panel(PaneKind::Ticker { symbol: s, trades: Vec::new(), loading: true })
                 }
@@ -805,6 +823,7 @@ impl TerminalApp {
                         self.status = format!("Added {key} to the watchlist");
                         self.watchlist.push(key);
                         self.last_quotes = None;
+                        self.save_settings();
                     }
                 }
                 Action::LinkedSymbol(link, s) => self.broadcast(link, &s, None),
@@ -812,6 +831,12 @@ impl TerminalApp {
                     Some(cmd) => self.dispatch(cmd),
                     None => tracing::warn!("internal command did not parse: {line}"),
                 },
+                Action::ShowStratChart(s, tf) => {
+                    let key = tr_data::security(&s).key();
+                    let bt = crate::backtest_view::BacktestPaneState::new(0, &key, tf);
+                    self.open_panel(PaneKind::Backtest(Box::new(bt)));
+                    self.status = format!("Loaded winning {}m backtest research chart for {key} in dedicated backtest pane", tf.minutes());
+                }
                 Action::Track(q, on) => {
                     self.worker.send(Request::Track { query: q.clone(), on });
                     // Refresh any open profile so the star updates.
@@ -856,6 +881,11 @@ impl TerminalApp {
             }
             Command::SymbolFunction(s, Function::Portfolio(view, arg)) => self.portfolio_command(view, &arg, Some(s)),
             Command::SymbolFunction(s, Function::Perp) => self.open_perp(Some(s)),
+            Command::SymbolFunction(s, Function::Strategy) => {
+                let key = tr_data::security(&s).key();
+                self.open_panel(PaneKind::Strategy(Box::new(crate::strategy_view::StrategyPaneState::new(&key))));
+                self.status = format!("{key}: AI Quantitative Bot & Strategy Lab");
+            }
             Command::SymbolFunction(s, Function::Trade(mut t)) => {
                 t.symbol = Some(s);
                 self.open_ticket(t, None);
@@ -906,10 +936,12 @@ impl TerminalApp {
                     }
                 }
                 self.last_quotes = None;
+                self.save_settings();
             }
             Function::WatchRemove(words) => {
                 let keys = keys_from_words(&words);
                 self.watchlist.retain(|s| !keys.contains(s));
+                self.save_settings();
             }
             Function::Layout(arg) => self.layout_command(&arg),
             Function::Layouts => {
@@ -1006,6 +1038,12 @@ impl TerminalApp {
                 let key = symbol.or_else(|| self.focused_symbol());
                 self.open_perp(key);
             }
+            Function::Strategy => {
+                let sym = symbol.or_else(|| self.focused_symbol()).unwrap_or_else(|| "US.AAPL".into());
+                let key = tr_data::security(&sym).key();
+                self.open_panel(PaneKind::Strategy(Box::new(crate::strategy_view::StrategyPaneState::new(&key))));
+                self.status = format!("{key}: AI Quantitative Bot & Strategy Lab");
+            }
         }
     }
 
@@ -1014,6 +1052,7 @@ impl TerminalApp {
     fn chart_mut(&mut self, pane: PaneId) -> Option<&mut ChartState> {
         match self.panes.iter_mut().find(|p| p.id == pane).map(|p| &mut p.kind) {
             Some(PaneKind::Chart(c)) => Some(c),
+            Some(PaneKind::Backtest(b)) => Some(&mut b.chart),
             _ => None,
         }
     }
@@ -1034,12 +1073,16 @@ impl TerminalApp {
                     full,
                     live,
                 } => {
-                    let worker = &self.worker;
-                    if let Some(PaneKind::Chart(c)) = self.panes.iter_mut().find(|p| p.id == pane).map(|p| &mut p.kind)
+                    let c = match self.panes.iter_mut().find(|p| p.id == pane).map(|p| &mut p.kind) {
+                        Some(PaneKind::Chart(c)) => Some(&mut **c),
+                        Some(PaneKind::Backtest(b)) => Some(&mut b.chart),
+                        _ => None,
+                    };
+                    if let Some(c) = c
                         && c.symbol == symbol
                         && c.tf == tf
                     {
-                        c.on_history(generation, bars, gpu, prepended, from_cache, exhausted, full, live, worker);
+                        c.on_history(generation, bars, gpu, prepended, from_cache, exhausted, full, live, &self.worker);
                     }
                 }
                 Response::HistoryError { pane, generation, error } => {
@@ -1052,9 +1095,9 @@ impl TerminalApp {
                         self.status = format!("data error: {error}");
                     }
                 }
-                Response::Indicators { pane, generation, built } => {
+                Response::Indicators { pane, generation, indicator_gen, built } => {
                     if let Some(c) = self.chart_mut(pane) {
-                        c.on_indicators(generation, built);
+                        c.on_indicators(generation, indicator_gen, built);
                     }
                 }
                 Response::Compare { pane, generation, symbol, line } => {

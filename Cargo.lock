@@ -6250,6 +6250,7 @@ dependencies = [
  "tr-hl",
  "tr-macos",
  "tr-moomoo",
+ "tr-strategy",
  "tr-turnkey",
  "tracing",
  "tracing-subscriber",
@@ -6739,6 +6740,22 @@ dependencies = [
  "serde",
  "serde_json",
  "tr-core",
+]
+
+[[package]]
+name = "tr-strategy"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "rand 0.9.5",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tr-core",
+ "tr-moomoo",
+ "tracing",
 ]
 
 [[package]]

@@ -118,6 +118,62 @@ pub fn pivots(o: &Ohlcv, session_of: impl Fn(i64) -> i64, kind: PivotKind) -> Ve
     names.iter().copied().zip(out).collect()
 }
 
+/// Candle-open price grid levels: rolling top, 2/4 mid, 1/4 mid, and bottom from prior completed candles.
+pub fn price_grid(o: &Ohlcv, lookback: usize) -> Vec<(&'static str, Vec<f64>)> {
+    let lookback = lookback.max(2);
+    let len = o.len();
+    let mut top = vec![NAN; len];
+    let mut upper_mid = vec![NAN; len];
+    let mut lower_mid = vec![NAN; len];
+    let mut bottom = vec![NAN; len];
+
+    if len <= lookback {
+        return vec![
+            ("Grid Top", top),
+            ("Grid Upper Mid", upper_mid),
+            ("Grid Lower Mid", lower_mid),
+            ("Grid Bottom", bottom),
+        ];
+    }
+
+    for i in lookback..len {
+        let mut prior_h = f64::NEG_INFINITY;
+        let mut prior_l = f64::INFINITY;
+        let cur_ts = o.ts.get(i).copied().unwrap_or(0);
+        let cur_day = cur_ts.div_euclid(86_400);
+
+        for k in (i - lookback)..i {
+            // Guard against multi-day / weekend session gaps: if we have bars in the current day,
+            // don't let bars from a previous day across a large gap dominate the intraday grid.
+            if cur_day > 0 && o.ts.get(k).map_or(false, |&kts| kts.div_euclid(86_400) < cur_day) {
+                if i - k > 2 {
+                    continue;
+                }
+            }
+            if o.high[k] > prior_h {
+                prior_h = o.high[k];
+            }
+            if o.low[k] < prior_l {
+                prior_l = o.low[k];
+            }
+        }
+        if prior_h.is_finite() && prior_l.is_finite() && prior_h > prior_l {
+            let span = prior_h - prior_l;
+            top[i] = prior_h;
+            upper_mid[i] = prior_l + span * 0.50;
+            lower_mid[i] = prior_l + span * 0.25;
+            bottom[i] = prior_l;
+        }
+    }
+
+    vec![
+        ("Grid Top", top),
+        ("Grid Upper Mid", upper_mid),
+        ("Grid Lower Mid", lower_mid),
+        ("Grid Bottom", bottom),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,5 +214,24 @@ mod tests {
         let w = pivots(&o, |ts| ts.div_euclid(day), PivotKind::Woodie);
         assert_eq!(w[0].1[2], (15.0 + 8.0 + 2.0 * 13.0) / 4.0);
         assert_eq!(pivots(&o, |ts| ts.div_euclid(day), PivotKind::Camarilla).len(), 9);
+    }
+
+    #[test]
+    fn price_grid_levels() {
+        let bars = [
+            Bar::new(0, 10.0, 12.0, 8.0, 11.0, 1.0),
+            Bar::new(60, 11.0, 15.0, 9.0, 13.0, 1.0),
+            Bar::new(120, 13.0, 14.0, 12.0, 13.5, 1.0),
+        ];
+        let o = Ohlcv::new(&bars);
+        let g = price_grid(&o, 2);
+        assert_eq!(g.len(), 4);
+        assert_eq!(g[0].0, "Grid Top");
+        assert_eq!(g[3].0, "Grid Bottom");
+        // Bar index 2 uses high/low from bars 0 and 1: High = 15, Low = 8.
+        assert_eq!(g[0].1[2], 15.0);
+        assert_eq!(g[3].1[2], 8.0);
+        assert_eq!(g[1].1[2], 8.0 + 7.0 * 0.50);
+        assert_eq!(g[2].1[2], 8.0 + 7.0 * 0.25);
     }
 }

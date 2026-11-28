@@ -137,19 +137,48 @@ impl MarketData for Markets {
         }
 
         let m_quotes = self.moomoo.fetch_quotes(&tickers).await.unwrap_or_default();
-        let mut out = Vec::new();
+        let mut quote_by_sym: std::collections::HashMap<String, tr_moomoo::Quote> = std::collections::HashMap::new();
         for q in m_quotes {
-            let sym_key = key_by_ticker.get(&q.symbol)
-                .or_else(|| key_by_ticker.get(&clean_ticker(&q.symbol)))
-                .cloned()
-                .unwrap_or_else(|| q.symbol.clone());
-            out.push(Quote {
-                symbol: sym_key,
-                last: q.last,
-                prev_close: q.prev_close,
-                ts: q.timestamp,
-                spark: vec![q.prev_close, q.low, q.high, q.last],
-            });
+            quote_by_sym.insert(clean_ticker(&q.symbol), q);
+        }
+
+        let mut out = Vec::new();
+        for ticker in &tickers {
+            let key = key_by_ticker.get(ticker).cloned().unwrap_or_else(|| ticker.clone());
+            if let Some(q) = quote_by_sym.get(ticker) {
+                out.push(Quote {
+                    symbol: key,
+                    last: q.last,
+                    prev_close: q.prev_close,
+                    ts: q.timestamp,
+                    spark: vec![q.prev_close, q.low, q.high, q.last],
+                });
+            } else if let Ok(guard) = self.cache.lock() {
+                if let Some(c) = guard.as_ref() {
+                    let bars = c.load(ticker, Timeframe::M1, 30)
+                        .or_else(|_| c.load(&key, Timeframe::M1, 30))
+                        .unwrap_or_default();
+                    if let Some(last_bar) = bars.last() {
+                        let prev_close = if bars.len() > 1 {
+                            bars.first().unwrap().open
+                        } else {
+                            last_bar.open
+                        };
+                        let spark = if bars.len() >= 4 {
+                            bars.iter().map(|b| b.close).collect()
+                        } else {
+                            vec![prev_close, last_bar.low, last_bar.high, last_bar.close]
+                        };
+                        out.push(Quote {
+                            symbol: key,
+                            last: last_bar.close,
+                            prev_close,
+                            ts: last_bar.ts,
+                            spark,
+                        });
+                    }
+                }
+            }
         }
         Ok(out)
     }

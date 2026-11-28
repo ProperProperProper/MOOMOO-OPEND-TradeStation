@@ -149,6 +149,9 @@ pub fn visible_extent(
         _ => p.extent(k, lo, hi)?,
     };
     for o in overlays.iter().filter(|o| matches!(o.kind, LineKind::Line | LineKind::Dots | LineKind::Steps)) {
+        if o.line.pyramid.level_len(0) != p.len0 {
+            continue;
+        }
         let kk = level_for(v.bar_px, o.line.pyramid.levels());
         if let Some((a, b)) = o.line.pyramid.extent(kk, lo, hi) {
             l = l.min(a * o.scale);
@@ -237,6 +240,7 @@ fn overlay_cmds(overlays: &[Overlay], v: &Viewport, t: &PaneTransform, base: &St
     let (lo, hi) = v.visible_range(len.max(v.right.ceil().max(0.0) as usize));
     overlays
         .iter()
+        .filter(|o| o.line.pyramid.level_len(0) == len)
         .map(|o| {
             let lp = &o.line.pyramid;
             let k = level_for(v.bar_px, lp.levels());

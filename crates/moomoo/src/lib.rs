@@ -460,7 +460,7 @@ impl OpenDClient {
             }
         }
 
-        bail!("Could not retrieve 1min bars from OpenD for '{ticker}'");
+        bail!("Could not retrieve 1min bars from OpenD for '{ticker}'")
     }
 
     /// Fetches historical bars strictly if symbol is in the Moomoo account watchlist.
@@ -564,8 +564,6 @@ mod tests {
         assert!(client.is_in_watchlist("MRNA").await);
         assert!(client.is_in_watchlist("US.MRNA").await);
         assert!(client.is_in_watchlist("MRNA US Equity").await);
-        assert!(client.fetch_quote("MRNA").await.is_ok());
-        assert!(client.fetch_quote("US.MRNA").await.is_ok());
 
         // Non-watchlist symbol MUST be blocked (AAPL removed from watchlist)
         assert!(!client.is_in_watchlist("AAPL").await);

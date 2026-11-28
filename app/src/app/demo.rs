@@ -282,9 +282,17 @@ impl TerminalApp {
     }
 
     fn demo_events(&mut self, events: Vec<Event>) {
+        let has_fills = events.iter().any(|e| matches!(e, Event::Filled(_)));
         for e in events {
             let ok = matches!(e, Event::Filled(_));
             self.trade_toast(format!("Demo: {}{}", e.message(), self.unsaved_note()), ok);
+        }
+        if has_fills {
+            for p in &mut self.panes {
+                if let super::PaneKind::Chart(c) = &mut p.kind {
+                    c.sync_order_fills(Some(&self.demo.pf));
+                }
+            }
         }
     }
 

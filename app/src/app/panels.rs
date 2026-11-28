@@ -59,6 +59,8 @@ impl TerminalApp {
             }
             PaneKind::Wei => actions.extend(markets_view::wei(ui, &self.quotes, self.wei_updated.as_deref())),
             PaneKind::Curve => actions.extend(crate::equity_view::equity_curve(ui, &self.demo.book)),
+            PaneKind::Strategy(s) => actions.extend(crate::strategy_view::strategy_panel(ui, s)),
+            PaneKind::Backtest(b) => actions.extend(b.show(ui, rect, focused, &self.worker)),
             PaneKind::Search { query } => {
                 let hits = if self.net_hits.0 == *query { self.net_hits.1.as_slice() } else { &[] };
                 let perps: Vec<&str> = perps.iter().map(String::as_str).collect();
@@ -232,6 +234,7 @@ impl TerminalApp {
         });
         if let Some(s) = remove {
             self.watchlist.retain(|x| *x != s);
+            self.save_settings();
         }
         out
     }

@@ -298,6 +298,16 @@ impl TerminalApp {
                 b.portfolio = Some(pf);
                 b.error = None;
                 b.last_quotes = None;
+                let pf_ref = if self.prefs.trading.account_mode == crate::prefs::AccountMode::Demo {
+                    Some(&*self.demo.pf)
+                } else {
+                    b.portfolio.as_deref()
+                };
+                for p in &mut self.panes {
+                    if let super::PaneKind::Chart(c) = &mut p.kind {
+                        c.sync_order_fills(pf_ref);
+                    }
+                }
             }
             Err(e) => {
                 tracing::warn!("portfolio: {e}");

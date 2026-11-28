@@ -10,9 +10,9 @@ use tr_chart::scene::ChartType;
 pub use tr_core::indicators::registry::Spec as IndicatorSpec;
 use tr_core::{Security, Timeframe, YellowKey};
 
-/// Indicators on a new chart: the 20 and 50 bar simple moving averages.
+/// Indicators on a new chart: Price Grid (PGRID) for quantitative strategies.
 pub fn default_indicators() -> Vec<IndicatorSpec> {
-    [20.0, 50.0].iter().filter_map(|n| IndicatorSpec::new("SMA", &[*n])).collect()
+    IndicatorSpec::new("PGRID", &[45.0]).into_iter().collect()
 }
 
 /// Views of the brokerage portfolio pane (`PORT`, `ACCT`, `POS`, `ORD`, `ACTV`).
@@ -280,6 +280,8 @@ pub enum Function {
     /// `AAPL PERP`: open the HIP-3 perp linked to a security. Alone, or on a perp, it switches
     /// the focused pane between the two.
     Perp,
+    /// Quantitative trading bot, strategy research & AI exit lab.
+    Strategy,
 }
 
 fn num<T: std::str::FromStr>(t: Option<&&str>) -> Option<T> {
@@ -323,6 +325,11 @@ fn parse_function(head: &str, rest: &[&str]) -> Option<Function> {
             Some("ADD") => Function::WatchAdd(words()[1..].to_vec()),
             Some("DEL") | Some("RM") | Some("REMOVE") => Function::WatchRemove(words()[1..].to_vec()),
             _ => Function::Watchlist,
+        },
+        "DEL" | "DELETE" | "RM" => match words().first().map(String::as_str) {
+            Some("LAYOUT") => Function::Layout(format!("DEL {}", words()[1..].join(" "))),
+            Some("WL") | Some("WATCHLIST") => Function::WatchRemove(words()[1..].to_vec()),
+            _ => Function::Layout(format!("DEL {}", joined())),
         },
         "LAYOUT" | "GRID" | "LP" => Function::Layout(joined()),
         "LAYOUTS" => Function::Layouts,
@@ -371,6 +378,7 @@ fn parse_function(head: &str, rest: &[&str]) -> Option<Function> {
         },
         "RANGE" => Function::Range(Range::parse(rest.first()?)?),
         "PERP" if rest.is_empty() => Function::Perp,
+        "BOT" | "STRAT" | "STRATEGY" | "QUANT" | "AILAB" => Function::Strategy,
         // Timeframes win where spellings overlap (`1D`, `1M`); otherwise try a range (`5D`, `YTD`),
         // then the indicator catalog (`RSI`, `BB 20 2.5`).
         _ => {
@@ -541,6 +549,7 @@ fn describe(f: &Function) -> String {
             "Kill switch: cancel every open Hyperliquid testnet order, then turn Hyperliquid orders off".into()
         }
         Function::Perp => "Switch between the security and its HIP-3 perp (PERP · HL xyz)".into(),
+        Function::Strategy => "AI Strategy, Backtesting & Quantitative Bot Lab".into(),
     }
 }
 

@@ -658,7 +658,7 @@ impl TerminalApp {
                         cmds.push(SettingsCmd::Layout(LayoutOp::Switch(name.clone())));
                     }
                     if ui.small_button("Rename").clicked() {
-                        self.renaming_layout = Some((name.clone(), name.clone()));
+                        self.renaming_layout = Some((name.clone(), name.clone(), true));
                         self.sidebar_open = true;
                     }
                     if ui.small_button("Duplicate").clicked() {

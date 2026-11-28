@@ -82,6 +82,11 @@ pub enum PaneSettings {
     Help,
     Wei,
     Curve,
+    Strategy(String),
+    Backtest {
+        symbol: String,
+        tf: Timeframe,
+    },
     Search(String),
     /// Headlines for a security (`None` = general market news).
     News(Option<String>),

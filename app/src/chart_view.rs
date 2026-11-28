@@ -68,6 +68,16 @@ struct DrawState {
     selected: Option<usize>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct OrderFillMarker {
+    pub ts: i64,
+    pub is_buy: bool,
+    pub price: f64,
+    pub qty: f64,
+    pub order_id: String,
+    pub label: String,
+}
+
 pub struct ChartState {
     pub id: PaneId,
     pub symbol: String,
@@ -77,6 +87,10 @@ pub struct ChartState {
     pub magnet: bool,
     pub show_volume: bool,
     pub show_congress: bool,
+    pub show_strategy_markers: bool,
+    pub is_backtest_chart: bool,
+    pub strategy_markers: Vec<tr_strategy::StrategyMarker>,
+    pub order_fill_markers: Vec<OrderFillMarker>,
     pub indicators: Vec<IndicatorSpec>,
     pub drawings: Vec<Drawing>,
     pub compare: Option<String>,
@@ -84,6 +98,7 @@ pub struct ChartState {
     bars: Arc<Vec<Bar>>,
     gpu: Option<SeriesGpu>,
     generation: u64,
+    indicator_gen: u64,
     viewport: Option<Viewport>,
     manual_scale: Option<PriceScale>,
     glide: Option<Glide>,
@@ -137,12 +152,17 @@ impl ChartState {
             magnet: false,
             show_volume: true,
             show_congress: true,
+            show_strategy_markers: false,
+            is_backtest_chart: false,
+            strategy_markers: Vec::new(),
+            order_fill_markers: Vec::new(),
             indicators: crate::command::default_indicators(),
             drawings: Vec::new(),
             compare: None,
             bars: Arc::new(Vec::new()),
             gpu: None,
             generation: 0,
+            indicator_gen: 0,
             viewport: None,
             manual_scale: None,
             glide: None,
@@ -178,6 +198,7 @@ impl ChartState {
     /// (Re)load history for the current symbol and timeframe.
     pub fn load(&mut self, w: &Worker) {
         self.generation += 1;
+        self.indicator_gen += 1;
         self.loading = true;
         self.paging = false;
         self.exhausted = false;
@@ -263,6 +284,7 @@ impl ChartState {
     }
 
     pub fn toggle_indicator(&mut self, spec: IndicatorSpec, w: &Worker) {
+        self.indicator_gen += 1;
         if let Some(i) = self.indicators.iter().position(|s| s.same_kind(&spec)) {
             if self.indicators[i] == spec {
                 self.indicators.remove(i);
@@ -277,12 +299,14 @@ impl ChartState {
 
     /// Remove every instance of the indicator `code` (all moving averages of one kind).
     fn remove_indicator(&mut self, code: &str, w: &Worker) {
+        self.indicator_gen += 1;
         self.indicators.retain(|s| s.code != code);
         self.built.retain(|b| b.spec.code != code);
         self.request_indicators(w);
     }
 
     pub fn clear_indicators(&mut self) {
+        self.indicator_gen += 1;
         self.indicators.clear();
         self.built.clear();
     }
@@ -374,6 +398,7 @@ impl ChartState {
             w.send(Request::Indicators {
                 pane: self.id,
                 generation: self.generation,
+                indicator_gen: self.indicator_gen,
                 bars: self.bars.clone(),
                 tf: self.tf,
                 specs: self.indicators.clone(),
@@ -429,6 +454,7 @@ impl ChartState {
         }
         self.bars = bars;
         self.gpu = Some(gpu);
+        self.indicator_gen += 1;
         self.paging = false;
         self.exhausted = end_of_history(self.exhausted, exhausted, prepended, full);
         if !from_cache {
@@ -448,6 +474,11 @@ impl ChartState {
             }
         }
         self.apply_range();
+        if self.is_backtest_chart {
+            self.reload_strategy_markers();
+        } else {
+            self.sync_order_fills(None);
+        }
         // Live ticks only move the last bar: refresh indicators at most every 1.5 s and
         // leave the compare series alone. (A live feed filling a gap arrives as a refresh.)
         let due = self.last_indicator_req.is_none_or(|t| t.elapsed().as_millis() >= 1500);
@@ -491,9 +522,14 @@ impl ChartState {
         }
     }
 
-    pub fn on_indicators(&mut self, generation: u64, built: Vec<BuiltIndicator>) {
-        if generation == self.generation {
-            self.built = built;
+    pub fn on_indicators(&mut self, generation: u64, indicator_gen: u64, built: Vec<BuiltIndicator>) {
+        if generation == self.generation && indicator_gen == self.indicator_gen {
+            let matching = built.is_empty() || built.iter().all(|b| {
+                b.overlays.iter().all(|(_, o)| o.line.pyramid.level_len(0) == self.bars.len())
+            });
+            if matching {
+                self.built = built;
+            }
         }
     }
 
@@ -779,7 +815,9 @@ impl ChartState {
             .built
             .iter()
             .filter(|b| !b.spec.is_pane())
-            .flat_map(|b| b.overlays.iter().map(|o| o.1.clone()))
+            .flat_map(|b| b.overlays.iter())
+            .filter(|(_, o)| o.line.pyramid.level_len(0) == self.bars.len())
+            .map(|(_, o)| o.clone())
             .collect();
         if let Some(c) = &self.compare_line {
             let (lo, hi) = self.viewport.as_ref().map(|v| v.visible_range(len)).unwrap_or((0, len));
@@ -859,7 +897,12 @@ impl ChartState {
             let top = price_rect.bottom() + sub_h * k as f32;
             let r = Rect::from_min_max(pos2(plot_all.left(), top), pos2(plot_all.right(), top + sub_h));
             let def = b.spec.def();
-            let ovs: Vec<Overlay> = b.overlays.iter().map(|o| o.1.clone()).collect();
+            let ovs: Vec<Overlay> = b
+                .overlays
+                .iter()
+                .filter(|(_, o)| o.line.pyramid.level_len(0) == self.bars.len())
+                .map(|o| o.1.clone())
+                .collect();
             let mut s = style;
             s.thickness_px = 1.3;
             let so = scene::sub_pane(&ovs, &v, r.height() as f64, def.and_then(|d| d.range), s);
@@ -964,6 +1007,15 @@ impl ChartState {
         self.hover_marker = None;
         if self.show_congress {
             self.paint_markers(ui, price_rect, &v, &scale, hover, &reveal);
+        }
+
+        // ---- STRICT CHART SEPARATION ----
+        if self.is_backtest_chart {
+            // Dedicated Backtest Chart: renders winning backtest parameter markers
+            self.paint_strategy_markers(ui, price_rect, &v, &scale, hover);
+        } else {
+            // Standard Watchlist Chart: ONLY renders real / paper filled buy and sell orders
+            self.paint_order_fill_markers(ui, price_rect, &v, &scale, hover);
         }
 
         // ---- crosshair + legend ----
@@ -1166,13 +1218,22 @@ impl ChartState {
 
         // Overlay indicator values, one per line.
         let mut ly = y + 16.0;
-        let value_at = |l: &LineRef| l.pyramid.data.get(i).map(|p| p[1] as f64).filter(|v| v.is_finite());
+        let value_at = |l: &LineRef| {
+            if l.pyramid.level_len(0) == self.bars.len() {
+                l.pyramid.data.get(i).map(|p| p[1] as f64).filter(|v| v.is_finite())
+            } else {
+                None
+            }
+        };
         for bi in self.built.iter().filter(|b| !b.spec.is_pane()) {
             let vals: Vec<String> = bi
                 .overlays
                 .iter()
                 .filter_map(|(_, o)| value_at(&o.line).map(|v| format!("{v:.prec$}", prec = dec.min(4))))
                 .collect();
+            if vals.is_empty() {
+                continue;
+            }
             let c = bi.overlays.get(bi.overlays.len() / 2).map_or(text(), |o| opaque(&o.1));
             p.text(
                 pos2(price_rect.left() + 6.0, ly),
@@ -1420,6 +1481,335 @@ impl ChartState {
             hover_card(ui, c, t);
         }
     }
+
+    /// Re-evaluates winning strategy parameters on current chart bars to produce buy/sell markers.
+    pub fn reload_strategy_markers(&mut self) {
+        if !self.is_backtest_chart || self.bars.is_empty() {
+            return;
+        }
+        let sec = tr_data::security(&self.symbol);
+        let root = std::path::PathBuf::from(".");
+        let config = tr_strategy::load_symbol_strategy(&root, &format!("US.{}", sec.ticker))
+            .or_else(|_| tr_strategy::load_symbol_strategy(&root, &sec.ticker))
+            .ok();
+
+        let params = config.as_ref().map(|c| c.params.clone()).unwrap_or_default();
+        let interval = config.as_ref().map(|c| c.interval).unwrap_or(self.tf.minutes() as usize);
+
+        let m_bars: Vec<tr_moomoo::Bar> = self.bars.iter().map(|b| tr_moomoo::Bar {
+            ts: b.ts,
+            open: b.open,
+            high: b.high,
+            low: b.low,
+            close: b.close,
+            volume: b.volume,
+        }).collect();
+
+        let res = tr_strategy::run_backtest(
+            &sec.ticker,
+            interval,
+            &m_bars,
+            &params,
+            100_000.0,
+            0.95,
+            2.0,
+            0.0,
+        );
+
+        self.strategy_markers = tr_strategy::trades_to_markers(&res.trades);
+    }
+
+    /// Paints Buy (B) and Sell (S) markers on candlestick chart for winning promoted strategy parameters.
+    fn paint_strategy_markers(
+        &self,
+        ui: &Ui,
+        rect: Rect,
+        v: &Viewport,
+        s: &PriceScale,
+        hover: Option<Pos2>,
+    ) {
+        if self.strategy_markers.is_empty() || self.bars.is_empty() {
+            return;
+        }
+        let p = ui.painter_at(rect);
+        let len = self.bars.len();
+        let (lo, hi) = v.visible_range(len);
+        let full_r = (v.bar_px as f32 * 0.45).clamp(5.0, 9.0);
+        let mut best: Option<(f32, usize, Pos2)> = None;
+
+        for (mi, m) in self.strategy_markers.iter().enumerate() {
+            let idx = self.index_of_ts(m.ts).floor();
+            if idx < lo as f64 || idx >= hi as f64 || idx < 0.0 || idx >= len as f64 {
+                continue;
+            }
+            let i = idx as usize;
+            let bar = self.bars[i];
+            let x = rect.left() + v.x_center(i) as f32;
+            let off = 6.0 + full_r;
+
+            let (y, col, letter) = if m.is_buy {
+                (rect.top() + s.y_of(bar.low) as f32 + off, theme::up(), "B")
+            } else {
+                let exit_col = if m.pnl_pct.unwrap_or(0.0) >= 0.0 { theme::amber() } else { theme::down() };
+                (rect.top() + s.y_of(bar.high) as f32 - off, exit_col, "S")
+            };
+
+            let c = Pos2::new(x, y);
+            p.circle_filled(c, full_r, col);
+            p.circle_stroke(c, full_r, Stroke::new(1.0, Color32::WHITE));
+            p.text(c, Align2::CENTER_CENTER, letter, mono(full_r * 1.3), Color32::WHITE);
+
+            if let Some(h) = hover {
+                let d = h.distance(c);
+                if d <= full_r + 4.0 && best.is_none_or(|b| d < b.0) {
+                    best = Some((d, mi, c));
+                }
+            }
+        }
+
+        if let Some((_, mi, c)) = best {
+            let m = &self.strategy_markers[mi];
+            strat_hover_card(ui, c, m);
+        }
+    }
+
+    /// Translates an order timestamp (which may be UTC) to the timestamp scale of the bars,
+    /// accounting for market-time representations (e.g. US Eastern Time vs UTC).
+    pub fn match_bar_ts(&self, ts: i64) -> i64 {
+        let b = &self.bars;
+        let (Some(first), Some(last)) = (b.first(), b.last()) else { return ts };
+        let step = (self.tf.seconds() as i64).max(60);
+        let min_ts = first.ts.saturating_sub(step);
+        let max_ts = last.ts.saturating_add(step);
+
+        if ts >= min_ts && ts <= max_ts {
+            return ts;
+        }
+        // US Eastern Standard Time is UTC-5 (18,000s)
+        let est = ts - 18_000;
+        if est >= min_ts && est <= max_ts {
+            return est;
+        }
+        // US Eastern Daylight Time is UTC-4 (14,400s)
+        let edt = ts - 14_400;
+        if edt >= min_ts && edt <= max_ts {
+            return edt;
+        }
+        // Opposite direction if bars are UTC and fill was recorded in local
+        let plus_est = ts + 18_000;
+        if plus_est >= min_ts && plus_est <= max_ts {
+            return plus_est;
+        }
+        let plus_edt = ts + 14_400;
+        if plus_edt >= min_ts && plus_edt <= max_ts {
+            return plus_edt;
+        }
+        ts
+    }
+
+    /// Syncs real and paper filled orders from the active portfolio onto this chart.
+    pub fn sync_order_fills(&mut self, portfolio: Option<&tr_broker::Portfolio>) {
+        self.order_fill_markers.clear();
+
+        // 1. Determine which portfolio to read from: passed-in or demo-account fallback
+        let fallback_pf;
+        let mut pf_to_use = portfolio;
+        if pf_to_use.is_none_or(|p| p.activities.is_empty() && p.orders.is_empty()) {
+            let path = crate::worker::data_dir().join("demo-account.json");
+            if let Ok(bytes) = crate::storage::read(&path) {
+                if let Ok(book) = tr_broker::demo::DemoBook::from_json(&bytes) {
+                    fallback_pf = book.portfolio();
+                    pf_to_use = Some(&fallback_pf);
+                }
+            }
+        }
+
+        let Some(pf) = pf_to_use else { return };
+
+        let normalize = |s: &str| -> String {
+            let mut s = s.trim();
+            if let Some(rest) = s.strip_prefix("US.") {
+                s = rest;
+            }
+            if let Some(first) = s.split_whitespace().next() {
+                s = first;
+            }
+            s.to_uppercase()
+        };
+
+        let norm_ticker = normalize(&self.sec.ticker);
+        let norm_sym = normalize(&self.symbol);
+
+        let matches_sym = |s: &str| -> bool {
+            let ns = normalize(s);
+            ns == norm_ticker
+                || ns == norm_sym
+                || s.eq_ignore_ascii_case(&self.sec.ticker)
+                || s.eq_ignore_ascii_case(&self.symbol)
+        };
+
+        // 2. Process activities (executed trades/fills)
+        for act in &pf.activities {
+            if let Some(act_sym) = &act.symbol {
+                if matches_sym(act_sym) {
+                    let is_buy = act.kind.eq_ignore_ascii_case("BUY");
+                    let is_sell = act.kind.eq_ignore_ascii_case("SELL");
+                    if is_buy || is_sell {
+                        let price = act.price.unwrap_or(0.0);
+                        let qty = act.units.unwrap_or(0.0).abs();
+                        let ts = act.trade_date.map(|t| t.timestamp()).unwrap_or(0);
+                        self.order_fill_markers.push(OrderFillMarker {
+                            ts,
+                            is_buy,
+                            price,
+                            qty,
+                            order_id: act.id.clone(),
+                            label: format!("{} {:.2} @ ${:.2}", act.kind, qty, price),
+                        });
+                    }
+                }
+            }
+        }
+
+        // 3. Process filled orders (avoiding duplicating activities with same order ID)
+        for ord in &pf.orders {
+            if matches_sym(&ord.symbol) {
+                let filled_qty = ord.filled.unwrap_or(0.0);
+                let is_filled = ord.status == "EXECUTED"
+                    || ord.status == "FILLED"
+                    || ord.status == "CLOSED"
+                    || filled_qty > 0.0;
+                if is_filled {
+                    let is_buy = ord.is_buy();
+                    let price = ord.execution_price.or(ord.limit_price).unwrap_or(0.0);
+                    let qty = if filled_qty > 0.0 {
+                        filled_qty
+                    } else {
+                        ord.quantity.unwrap_or(0.0)
+                    }
+                    .abs();
+                    let ts = ord.updated.or(ord.placed).map(|t| t.timestamp()).unwrap_or(0);
+                    let ord_id_pref = format!("fill-{}", ord.id);
+                    if !self
+                        .order_fill_markers
+                        .iter()
+                        .any(|m| m.order_id == ord.id || m.order_id == ord_id_pref)
+                    {
+                        self.order_fill_markers.push(OrderFillMarker {
+                            ts,
+                            is_buy,
+                            price,
+                            qty,
+                            order_id: ord.id.clone(),
+                            label: format!("{} {:.2} @ ${:.2}", ord.action, qty, price),
+                        });
+                    }
+                }
+            }
+        }
+
+        self.order_fill_markers.sort_by_key(|m| m.ts);
+    }
+
+    /// Paints Buy (B) and Sell (S) markers on candlestick chart for real and paper filled orders.
+    fn paint_order_fill_markers(
+        &self,
+        ui: &Ui,
+        rect: Rect,
+        v: &Viewport,
+        s: &PriceScale,
+        hover: Option<Pos2>,
+    ) {
+        if self.order_fill_markers.is_empty() || self.bars.is_empty() {
+            return;
+        }
+        let p = ui.painter_at(rect);
+        let len = self.bars.len();
+        let (lo, hi) = v.visible_range(len);
+        let full_r = (v.bar_px as f32 * 0.45).clamp(5.0, 9.0);
+        let mut best: Option<(f32, usize, Pos2)> = None;
+        let mut stack: std::collections::HashMap<(usize, bool), u32> = std::collections::HashMap::new();
+
+        for (mi, m) in self.order_fill_markers.iter().enumerate() {
+            let effective_ts = self.match_bar_ts(m.ts);
+            let idx = self.index_of_ts(effective_ts).floor().clamp(0.0, (len - 1) as f64);
+            if idx < lo as f64 || idx >= hi as f64 {
+                continue;
+            }
+            let i = idx as usize;
+            let bar = self.bars[i];
+            let x = rect.left() + v.x_center(i) as f32;
+            let n = stack.entry((i, m.is_buy)).or_insert(0);
+            let off = 6.0 + full_r + (*n as f32) * (full_r * 2.2 + 2.0);
+            *n += 1;
+
+            let (y, col, letter) = if m.is_buy {
+                (rect.top() + s.y_of(bar.low) as f32 + off, theme::up(), "B")
+            } else {
+                (rect.top() + s.y_of(bar.high) as f32 - off, theme::down(), "S")
+            };
+
+            let c = Pos2::new(x, y);
+            p.circle_filled(c, full_r, col);
+            p.circle_stroke(c, full_r, Stroke::new(1.5, Color32::WHITE));
+            p.text(c, Align2::CENTER_CENTER, letter, mono(full_r * 1.3), Color32::WHITE);
+
+            // Subtle execution price line on the candlestick bar
+            if m.price > 0.0 {
+                let py = rect.top() + s.y_of(m.price) as f32;
+                if py >= rect.top() && py <= rect.bottom() {
+                    p.hline((x - 4.0)..=(x + 4.0), py, Stroke::new(1.2, col));
+                }
+            }
+
+            if let Some(h) = hover {
+                let d = h.distance(c);
+                if d <= full_r + 4.0 && best.is_none_or(|b| d < b.0) {
+                    best = Some((d, mi, c));
+                }
+            }
+        }
+
+        if let Some((_, mi, c)) = best {
+            let m = &self.order_fill_markers[mi];
+            order_fill_hover_card(ui, c, m);
+        }
+    }
+}
+
+fn order_fill_hover_card(ui: &Ui, at: Pos2, m: &OrderFillMarker) {
+    let action_str = if m.is_buy { "ORDER FILLED: BUY" } else { "ORDER FILLED: SELL" };
+    let action_col = if m.is_buy { theme::up() } else { theme::down() };
+    let dt = chrono::DateTime::from_timestamp(m.ts, 0)
+        .map(|d| d.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+        .unwrap_or_else(|| format!("{}", m.ts));
+    let total = m.price * m.qty;
+
+    let lines = [
+        (action_str.to_string(), action_col),
+        (format!("Price: ${:.2}", m.price), theme::text()),
+        (format!("Qty:   {:.2} shs (${:.2})", m.qty, total), theme::text()),
+        (format!("Time:  {dt}"), theme::muted()),
+        (format!("ID:    #{}", m.order_id), theme::muted()),
+    ];
+    let w = lines.iter().map(|(l, _)| l.len()).max().unwrap_or(10) as f32 * 7.2 + 16.0;
+    let h = lines.len() as f32 * 15.0 + 10.0;
+    let screen = ui.ctx().content_rect();
+    let mut min = at + vec2(12.0, 12.0);
+    if min.x + w > screen.right() {
+        min.x = at.x - w - 12.0;
+    }
+    if min.y + h > screen.bottom() {
+        min.y = at.y - h - 12.0;
+    }
+    let card = Rect::from_min_size(min, vec2(w, h));
+    let layer = egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("order-fill-card"));
+    let p = ui.ctx().layer_painter(layer);
+    p.rect_filled(card, 3.0, Color32::from_rgb(20, 22, 26));
+    p.rect_stroke(card, 3.0, Stroke::new(1.0, action_col), egui::StrokeKind::Inside);
+    for (k, (l, c)) in lines.iter().enumerate() {
+        p.text(card.left_top() + vec2(8.0, 5.0 + k as f32 * 15.0), Align2::LEFT_TOP, l, mono(11.5), *c);
+    }
 }
 
 fn opaque(o: &Overlay) -> Color32 {
@@ -1493,6 +1883,42 @@ fn hover_card(ui: &Ui, at: Pos2, t: &Trade) {
     }
 }
 
+fn strat_hover_card(ui: &Ui, at: Pos2, m: &tr_strategy::StrategyMarker) {
+    let dt = chrono::DateTime::from_timestamp(m.ts, 0)
+        .map(|d| d.format("%Y-%m-%d %H:%M:%S").to_string())
+        .unwrap_or_else(|| m.ts.to_string());
+    let title = if m.is_buy { "AI STRATEGY ENTRY (PROMOTED)" } else { "AI STRATEGY EXIT" };
+    let title_col = if m.is_buy { theme::up() } else { theme::amber() };
+    let mut lines = vec![
+        (title.to_string(), title_col),
+        (m.label.clone(), theme::text()),
+        (format!("Price: ${:.2}", m.price), theme::text()),
+        (format!("Time:  {}", dt), theme::muted()),
+    ];
+    if let Some(pnl) = m.pnl_pct {
+        let pnl_col = if pnl >= 0.0 { theme::up() } else { theme::down() };
+        lines.push((format!("Return: {:+.2}%", pnl), pnl_col));
+    }
+    let w = lines.iter().map(|(l, _)| l.len()).max().unwrap_or(10) as f32 * 7.2 + 14.0;
+    let h = lines.len() as f32 * 14.0 + 8.0;
+    let screen = ui.ctx().content_rect();
+    let mut min = at + vec2(12.0, 12.0);
+    if min.x + w > screen.right() {
+        min.x = at.x - w - 12.0;
+    }
+    if min.y + h > screen.bottom() {
+        min.y = at.y - h - 12.0;
+    }
+    let card = Rect::from_min_size(min, vec2(w, h));
+    let layer = egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("strat-card"));
+    let p = ui.ctx().layer_painter(layer);
+    p.rect_filled(card, 0.0, Color32::from_rgb(16, 16, 16));
+    p.rect_stroke(card, 0.0, Stroke::new(1.0, amber_dim()), StrokeKind::Inside);
+    for (k, (l, c)) in lines.iter().enumerate() {
+        p.text(card.left_top() + vec2(7.0, 4.0 + k as f32 * 14.0), Align2::LEFT_TOP, &l, mono(11.5), *c);
+    }
+}
+
 /// Whether the chart has reached the start of its history after a response. A full load decides
 /// it, since it may come from another source than the bars before it. A page decides it too. Live
 /// updates and refreshes keep what the chart knew.
@@ -1563,5 +1989,44 @@ mod tests {
         assert_eq!((g.from, g.to.right), (shown, shown.right - 40.0));
         c.reset_view();
         assert_eq!(c.glide.map(|g| g.to), Some(Viewport::fit_last(500, DEFAULT_VISIBLE, 800.0)));
+    }
+
+    #[test]
+    fn standard_chart_separates_strategy_markers_and_syncs_order_fills() {
+        let mut c = ChartState::new(1, "AAPL", Timeframe::M1);
+        assert!(!c.show_strategy_markers, "standard chart starts with strategy markers off");
+        assert!(c.order_fill_markers.is_empty());
+
+        let mut pf = tr_broker::Portfolio::default();
+        pf.activities.push(tr_broker::Activity {
+            account_id: "ACC1".into(),
+            id: "ACT1".into(),
+            kind: "BUY".into(),
+            symbol: Some("AAPL".into()),
+            description: "Bought AAPL".into(),
+            units: Some(10.0),
+            price: Some(150.0),
+            amount: Some(1500.0),
+            fee: None,
+            currency: "USD".into(),
+            trade_date: Some(chrono::Utc::now()),
+            settlement_date: None,
+            market: None,
+        });
+
+        c.sync_order_fills(Some(&pf));
+        assert_eq!(c.order_fill_markers.len(), 1);
+        assert_eq!(c.order_fill_markers[0].is_buy, true);
+        assert_eq!(c.order_fill_markers[0].qty, 10.0);
+        assert_eq!(c.order_fill_markers[0].price, 150.0);
+
+        // Test timezone offset matching (e.g. UTC vs US Eastern time)
+        c.bars = Arc::new(vec![
+            Bar::new(1795771860, 220.0, 225.0, 219.0, 224.0, 100.0), // 09:31 EST (naive)
+            Bar::new(1795784400, 224.0, 228.0, 223.0, 226.0, 100.0), // 13:00 EST (naive)
+        ]);
+        let utc_fill_ts = 1795789806; // 14:30 UTC
+        let matched = c.match_bar_ts(utc_fill_ts);
+        assert_eq!(matched, utc_fill_ts - 18_000, "14:30 UTC correctly shifts -5h to 09:30 EST within bar range");
     }
 }

@@ -412,6 +412,11 @@ impl TerminalApp {
                 c.load(&self.worker);
                 PaneKind::Chart(c)
             }
+            PaneKind::Backtest(mut b) => {
+                b.chart.id = id;
+                b.chart.load(&self.worker);
+                PaneKind::Backtest(b)
+            }
             PaneKind::Ticker { symbol, .. } => {
                 self.worker.send(Request::TickerTrades { pane: id, symbol: symbol.clone() });
                 PaneKind::Ticker { symbol, trades: Vec::new(), loading: true }
@@ -500,7 +505,9 @@ impl TerminalApp {
         match &mut self.panes[i].kind {
             PaneKind::Chart(c) => {
                 if c.symbol != key {
+                    c.show_strategy_markers = false;
                     c.set_symbol(&key, &self.worker);
+                    c.sync_order_fills(None);
                 }
             }
             PaneKind::Ticker { symbol: s, trades, loading } => {
@@ -524,6 +531,12 @@ impl TerminalApp {
             PaneKind::Options(o) => {
                 if o.symbol != key {
                     **o = super::OptionsPane::new(&key, o.strikes, o.show_greeks);
+                }
+            }
+            PaneKind::Strategy(s) => {
+                if s.symbol != key {
+                    let _ = s.bot.switch_symbol(&key);
+                    s.symbol = key;
                 }
             }
             _ => return false,
@@ -732,6 +745,14 @@ impl TerminalApp {
             }
             "WEI" | "MARKETS" => PaneKind::Wei,
             "EQ" | "EQUITY" | "GC" | "CURVE" | "YC" => PaneKind::Curve,
+            "STRAT" | "STRATEGY" | "BOT" | "QUANT" => {
+                let sym = given.or(current).unwrap_or_else(|| "US.MRNA".to_string());
+                PaneKind::Strategy(Box::new(crate::strategy_view::StrategyPaneState::new(&sym)))
+            }
+            "BT" | "BACKTEST" => {
+                let sym = given.or(current).unwrap_or_else(|| "US.MRNA".to_string());
+                PaneKind::Backtest(Box::new(crate::backtest_view::BacktestPaneState::new(0, &sym, tr_core::Timeframe::M5)))
+            }
             "CONG" | "FEED" | "CONGRESS" => PaneKind::Feed { filter: FeedFilter::default() },
             "POL" | "POLITICIANS" => PaneKind::Politicians,
             "ALRT" | "ALERTS" => PaneKind::Alerts,
@@ -816,6 +837,9 @@ impl TerminalApp {
                 p.link = sp.link;
                 p.title = sp.title;
                 p.window = sp.window;
+                if let PaneKind::Chart(c) = &mut p.kind {
+                    c.sync_order_fills(None);
+                }
             }
         }
         doc.dock.remap(&|id| map.get(&id).copied());
@@ -968,13 +992,17 @@ impl TerminalApp {
                 Ok(format!("Duplicated {name:?} as {:?}", doc.name))
             }
             LayoutOp::Delete(name) => {
-                self.store.delete(&name)?;
+                let _ = self.store.delete(&name);
                 self.refresh_layout_names();
+                if self.renaming_layout.as_ref().is_some_and(|(r, _, _)| r.eq_ignore_ascii_case(&name)) {
+                    self.renaming_layout = None;
+                }
                 if name.eq_ignore_ascii_case(&self.layout_name) {
                     match self.layout_names.first().cloned() {
                         Some(next) => {
-                            let doc = self.store.load(&next)?;
-                            self.apply_doc(doc);
+                            if let Ok(doc) = self.store.load(&next) {
+                                self.apply_doc(doc);
+                            }
                         }
                         None => {
                             self.apply_doc(LayoutDoc::default_workspace("Default", &self.prefs.panels));

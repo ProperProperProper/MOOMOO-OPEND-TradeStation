@@ -1161,6 +1161,23 @@ fn catalog() -> Vec<Def> {
         overlay("PIVOTWOODIE", "Pivot Points (Woodie)", lvl, |i, _| pivot_levels(i, PivotKind::Woodie))
             .alias(&["WOODIE"]),
         overlay("PIVOTDM", "Pivot Points (DeMark)", lvl, |i, _| pivot_levels(i, PivotKind::Demark)).alias(&["DEMARK"]),
+        overlay("PGRID", "Price Grid (Candle-Open Cross)", lvl, |i, p| {
+            levels::price_grid(&i.d, n(p, 0))
+                .into_iter()
+                .enumerate()
+                .map(|(idx, (name, v))| {
+                    let tone = match idx {
+                        0 => Tone::Down,
+                        1 => Tone::Signal,
+                        2 => Tone::Main,
+                        _ => Tone::Up,
+                    };
+                    out(name, v, Plot::Line, tone)
+                })
+                .collect()
+        })
+        .alias(&["GRIDXC", "PRICEGRID", "ANTGRID"])
+        .n("Lookback", 45.0),
     ]
 }
 

@@ -103,6 +103,7 @@ pub enum Request {
     Indicators {
         pane: PaneId,
         generation: u64,
+        indicator_gen: u64,
         bars: Arc<Vec<Bar>>,
         tf: Timeframe,
         specs: Vec<IndicatorSpec>,
@@ -281,6 +282,7 @@ pub enum Response {
     Indicators {
         pane: PaneId,
         generation: u64,
+        indicator_gen: u64,
         built: Vec<BuiltIndicator>,
     },
     Compare {
@@ -501,9 +503,15 @@ async fn congress_refresh(s: &Shared) {
 /// Bars saved by an earlier session, to paint before the network answers.
 #[cfg(not(target_arch = "wasm32"))]
 fn cached_bars(s: &Shared, symbol: &str, tf: Timeframe, limit: usize) -> Option<Vec<Bar>> {
+    let sec = tr_data::security(symbol);
     let m1_limit = (limit * tf.minutes() as usize).max(limit);
     s.cache.lock().ok().and_then(|c| {
         c.as_ref().and_then(|c| {
+            if let Ok(m1_bars) = c.load(&sec.ticker, Timeframe::M1, m1_limit) {
+                if !m1_bars.is_empty() {
+                    return Some(tf.resample(&m1_bars));
+                }
+            }
             if let Ok(m1_bars) = c.load(symbol, Timeframe::M1, m1_limit) {
                 if !m1_bars.is_empty() {
                     return Some(tf.resample(&m1_bars));
@@ -691,9 +699,9 @@ async fn handle(s: &Arc<Shared>, req: Request) {
                 Err(_) => {}
             }
         }
-        Request::Indicators { pane, generation, bars, tf, specs, palette } => {
+        Request::Indicators { pane, generation, indicator_gen, bars, tf, specs, palette } => {
             let built = rt::blocking(move || build_indicators(&bars, tf, &specs, &palette)).await.unwrap_or_default();
-            s.send(Response::Indicators { pane, generation, built });
+            s.send(Response::Indicators { pane, generation, indicator_gen, built });
         }
         Request::Compare { pane, generation, symbol, tf, base } => {
             let limit = base.len().max(100);

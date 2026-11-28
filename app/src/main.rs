@@ -3,6 +3,7 @@
 
 mod anim;
 mod app;
+mod backtest_view;
 mod chart_view;
 mod command;
 mod congress_view;
@@ -15,6 +16,7 @@ mod markets_view;
 mod palette;
 mod prefs;
 mod storage;
+mod strategy_view;
 mod theme;
 mod themes;
 mod wallet_worker;
