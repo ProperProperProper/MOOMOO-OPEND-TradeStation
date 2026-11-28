@@ -124,6 +124,30 @@ mod tests {
     }
 
     #[test]
+    fn test_backtest_entry_at_next_bar_open() {
+        let bars = make_test_bars(120);
+        let params = StrategyParams {
+            grid_lookback: 20,
+            grid_intervals: 4,
+            take_profit_pct: 0.03,
+            stop_loss_pct: 0.05,
+            ..Default::default()
+        };
+        let signals = evaluate_signals(&bars, &params);
+        let res = run_backtest("US.ANT", 1, &bars, &params, 100_000.0, 0.95, 0.0, 0.0);
+        if let Some(first_trade) = res.trades.first() {
+            let entry_ts = first_trade.entry_time.parse::<i64>().unwrap();
+            // Find index of the entry bar
+            let entry_idx = bars.iter().position(|b| b.ts == entry_ts).unwrap();
+            assert!(entry_idx > 0, "Entry cannot occur on bar 0");
+            // The signal MUST have confirmed on the PREVIOUS bar (entry_idx - 1), NOT on the entry bar itself
+            assert!(signals[entry_idx - 1].long_signal, "Prior bar must have confirmed the long signal");
+            // And the entry price must match the open of the entry bar (with 0 slippage)
+            assert!((first_trade.entry_price - bars[entry_idx].open).abs() < 1e-6);
+        }
+    }
+
+    #[test]
     fn test_promotion_gate() {
         let base = BacktestResult {
             symbol: "US.ANT".into(),

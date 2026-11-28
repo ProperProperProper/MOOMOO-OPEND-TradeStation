@@ -54,6 +54,7 @@ pub fn run_backtest(
     let slip = slippage_bps / 10000.0;
     let mut peak_equity = capital;
     let mut max_drawdown = 0.0;
+    let mut pending_buy = false;
 
     for sig in &signals {
         let price = sig.open;
@@ -108,8 +109,8 @@ pub fn run_backtest(
             }
         }
 
-        // 2. If flat, evaluate entry signal
-        if position_qty == 0.0 && sig.long_signal {
+        // 2. If flat and an entry signal confirmed on the previous bar, execute at this bar's open
+        if position_qty == 0.0 && pending_buy {
             let fill_p = price * (1.0 + slip);
             let spend = cash * allocation;
             let qty = (spend / fill_p).floor();
@@ -125,6 +126,12 @@ pub fn run_backtest(
                     params.clone(),
                 ));
             }
+            pending_buy = false;
+        }
+
+        // 3. If flat, evaluate entry signal confirming on candle close -> queue for open of next bar
+        if position_qty == 0.0 && sig.long_signal {
+            pending_buy = true;
         }
 
         // Track running equity and drawdown
