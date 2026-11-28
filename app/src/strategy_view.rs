@@ -109,7 +109,7 @@ pub fn strategy_panel(ui: &mut Ui, state: &mut StrategyPaneState) -> Vec<Action>
     egui::ScrollArea::vertical().show(ui, |ui| {
         // --- 1. Header & Active Bot Status ---
         ui.horizontal(|ui| {
-            ui.label(RichText::new("ANT-TRADER BOT & STRATEGY LAB").font(ui_font(13.0)).strong().color(amber()));
+            ui.label(RichText::new("DRBT-GRID · DYNAMIC RANGE-BREAK TREND LAB").font(ui_font(13.0)).strong().color(amber()));
             ui.add_space(dp(12.0));
 
             let (badge_text, badge_color) = if state.bot.running {

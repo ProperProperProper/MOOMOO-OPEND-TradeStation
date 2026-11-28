@@ -1,3 +1,8 @@
+//! DRBT-Grid: Dynamic Range-Break Trend Strategy Engine
+//!
+//! Implements multi-timeframe interval sweeps (1m–10m), rolling Donchian quartile grid quantization,
+//! asymmetric risk-managed exits with dynamic trailing stops, and Apple Silicon E-core thermal governance.
+
 pub mod model;
 pub mod grid;
 pub mod exits;

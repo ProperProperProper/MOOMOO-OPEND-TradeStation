@@ -89,7 +89,7 @@ impl BacktestPaneState {
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(dp(6.0));
-                if ui.button(RichText::new("📊 Lab").font(ui_font(10.5))).on_hover_text("Open Quantitative Strategy & Bot Lab").clicked() {
+                if ui.button(RichText::new("📊 Lab").font(ui_font(10.5))).on_hover_text("Open DRBT-Grid (Dynamic Range-Break Trend) Strategy Lab").clicked() {
                     actions.push(Action::Command("STRAT".into()));
                 }
                 if ui.button(RichText::new("📈 Watchlist Chart").font(ui_font(10.5)).color(up())).on_hover_text("Open clean standard Watchlist chart").clicked() {

@@ -884,7 +884,7 @@ impl TerminalApp {
             Command::SymbolFunction(s, Function::Strategy) => {
                 let key = tr_data::security(&s).key();
                 self.open_panel(PaneKind::Strategy(Box::new(crate::strategy_view::StrategyPaneState::new(&key))));
-                self.status = format!("{key}: AI Quantitative Bot & Strategy Lab");
+                self.status = format!("{key}: DRBT-Grid · Dynamic Range-Break Trend Lab");
             }
             Command::SymbolFunction(s, Function::Trade(mut t)) => {
                 t.symbol = Some(s);
@@ -1042,7 +1042,7 @@ impl TerminalApp {
                 let sym = symbol.or_else(|| self.focused_symbol()).unwrap_or_else(|| "US.AAPL".into());
                 let key = tr_data::security(&sym).key();
                 self.open_panel(PaneKind::Strategy(Box::new(crate::strategy_view::StrategyPaneState::new(&key))));
-                self.status = format!("{key}: AI Quantitative Bot & Strategy Lab");
+                self.status = format!("{key}: DRBT-Grid · Dynamic Range-Break Trend Lab");
             }
         }
     }

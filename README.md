@@ -43,8 +43,9 @@ A fast, keyboard-driven market terminal in pure Rust: GPU charting with a Bloomb
   - Shows simulated winning parameter trades without cluttering the operational watchlist chart.
   - Quick-switch navigation buttons `[📈 Watchlist Chart]` and `[📊 Lab]`.
 
-### 2. AI Quantitative Bot & Strategy Lab (`AI` Pane)
+### 2. DRBT-Grid: Dynamic Range-Break Trend Strategy & Bot Lab (`AI` Pane)
 - Comprehensive quantitative research and execution module (`crates/strategy`).
+- **DRBT-Grid Architecture**: Quantizes a rolling 45-period range into 4 adaptive quartile bands, capturing dynamic range breakouts and mean-reversion trends with asymmetric trailing stops.
 - **Interval Sweeps**: Parallel evaluation across 1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m, 9m, and 10m intervals.
 - **Hyperparameter Grid Optimization**: Evaluates entry models, exit breakdown triggers, lookback windows, stop losses, take profits, and trailing activations.
 - **Winning Parameter Promotion**: Automatically saves top-performing strategy parameters to `strategies/<SYMBOL>/paper.json` for live simulated execution.
