@@ -1,18 +1,18 @@
 {
-  "interval": 10,
+  "symbol": "US.APP",
+  "interval": 7,
   "mode": "SIMULATE",
   "params": {
-    "entry_mode": "any_grid_cross",
+    "grid_lookback": 16,
+    "grid_intervals": 4,
+    "entry_mode": "lower_half_cross",
     "exit_mode": "lower_half_breakdown",
-    "grid_intervals": 14,
-    "grid_lookback": 60,
     "open_delay_minutes": 0,
-    "stop_loss_pct": 0.1324,
-    "take_profit_pct": 0.007,
-    "trailing_activation_pct": 0.02,
-    "trailing_stop_pct": 0.015
+    "stop_loss_pct": 0.03,
+    "take_profit_pct": 0.03,
+    "trailing_activation_pct": 0.0,
+    "trailing_stop_pct": 0.0
   },
-  "run_id": "US-APP-MINUTE-20261128-012043",
-  "symbol": "US.APP",
-  "updated_at": "2026-11-27T15:33:10.092675+00:00"
+  "run_id": "US-APP-NEXTBAR-REOPT-20261128-101418",
+  "updated_at": "2026-11-28T10:14:18.480442+00:00"
 }

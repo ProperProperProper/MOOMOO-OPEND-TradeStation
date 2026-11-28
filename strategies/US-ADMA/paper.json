@@ -1,17 +1,18 @@
 {
+  "symbol": "US.ADMA",
   "interval": 10,
   "mode": "SIMULATE",
   "params": {
-    "entry_mode": "any_grid_cross",
+    "grid_lookback": 5,
+    "grid_intervals": 8,
+    "entry_mode": "top_breakout",
     "exit_mode": "any_grid_cross_down",
-    "grid_intervals": 4,
-    "grid_lookback": 45,
-    "stop_loss_pct": 0.1324,
-    "take_profit_pct": 0.01918,
-    "trailing_activation_pct": 0.0,
-    "trailing_stop_pct": 0.0
+    "open_delay_minutes": 0,
+    "stop_loss_pct": 0.03,
+    "take_profit_pct": 0.02,
+    "trailing_activation_pct": 0.015,
+    "trailing_stop_pct": 0.01
   },
-  "run_id": "INITIAL-BASELINE",
-  "symbol": "US.ADMA",
-  "updated_at": "2026-11-28T00:00:00+00:00"
+  "run_id": "US-ADMA-NEXTBAR-REOPT-20261128-101709",
+  "updated_at": "2026-11-28T10:17:09.495830+00:00"
 }

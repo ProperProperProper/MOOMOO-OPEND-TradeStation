@@ -1,17 +1,18 @@
 {
-  "interval": 10,
+  "symbol": "US.AAPL",
+  "interval": 9,
   "mode": "SIMULATE",
   "params": {
-    "entry_mode": "any_grid_cross",
-    "exit_mode": "any_grid_cross_down",
+    "grid_lookback": 8,
     "grid_intervals": 4,
-    "grid_lookback": 45,
-    "stop_loss_pct": 0.1324,
-    "take_profit_pct": 0.01918,
+    "entry_mode": "lower_half_cross",
+    "exit_mode": "lower_half_breakdown",
+    "open_delay_minutes": 0,
+    "stop_loss_pct": 0.03,
+    "take_profit_pct": 0.005,
     "trailing_activation_pct": 0.0,
     "trailing_stop_pct": 0.0
   },
-  "run_id": "INITIAL-BASELINE",
-  "symbol": "US.AAPL",
-  "updated_at": "2026-11-28T00:00:00+00:00"
+  "run_id": "US-AAPL-NEXTBAR-REOPT-20261128-101617",
+  "updated_at": "2026-11-28T10:16:17.526634+00:00"
 }

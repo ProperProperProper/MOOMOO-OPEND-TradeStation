@@ -1,18 +1,18 @@
 {
+  "symbol": "US.MU",
   "interval": 7,
   "mode": "SIMULATE",
   "params": {
-    "entry_mode": "any_grid_cross",
-    "exit_mode": "any_grid_cross_down",
-    "grid_intervals": 16,
-    "grid_lookback": 5,
-    "open_delay_minutes": 12,
-    "stop_loss_pct": 0.1324,
-    "take_profit_pct": 0.0084,
+    "grid_lookback": 8,
+    "grid_intervals": 4,
+    "entry_mode": "lower_half_cross",
+    "exit_mode": "bottom_breakdown",
+    "open_delay_minutes": 0,
+    "stop_loss_pct": 0.03,
+    "take_profit_pct": 0.005,
     "trailing_activation_pct": 0.0,
     "trailing_stop_pct": 0.0
   },
-  "run_id": "US-MU-MINUTE-20261128-031016",
-  "symbol": "US.MU",
-  "updated_at": "2026-11-27T16:11:42.071413+00:00"
+  "run_id": "US-MU-NEXTBAR-REOPT-20261128-101339",
+  "updated_at": "2026-11-28T10:13:39.150881+00:00"
 }
