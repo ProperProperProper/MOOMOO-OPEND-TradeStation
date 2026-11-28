@@ -16,13 +16,19 @@ Build a fast, keyboard-driven market terminal in pure Rust: GPU charting with a 
 - **Pure Rust Stack**: Native wgpu GPU rendering, egui immediate-mode UI, tokio async engine, rusqlite local storage.
 - **Dedicated Crate**: `crates/moomoo` implements `OpenDClient` with built-in loopback and watchlist verification.
 - **Market Data Router**: `crates/data` feeds all quotes and history directly from `tr-moomoo`.
+- **Strategy & AI Engine**: `crates/strategy` provides quantitative optimization, multi-core cooling governor, grid search, and paper execution.
 - **In-App Notifications**: On-screen animated toasts deliver private notifications.
 
-## Progress
-- [x] Command line, docking workspace, saved layouts, rebindable hotkeys.
+## Completed Milestones
+- [x] Command line, docking workspace, saved layouts, layout deletion, rebindable hotkeys.
 - [x] wgpu GPU charts: candles/bars/line/area, 1m–1M, drawings, 151 indicators.
 - [x] Moomoo OpenD integration (`crates/moomoo`).
 - [x] Loopback firewall with SSH/FTP/SMTP/webhook rejection.
 - [x] Watchlist-only data feed enforcement.
 - [x] Complete removal of auto-updater and telemetry.
 - [x] Pre-push security verification and GitHub repository rename to `MOOMOO-OPEND-TradeStation`.
+- [x] AI Quantitative Bot & Strategy Lab pane (`PaneKind::Strategy`, code `AI`).
+- [x] Dedicated Backtest Runner chart (`PaneKind::Backtest`, code `BT`) separated completely from standard watchlist chart (`GP`).
+- [x] Real & paper executed order fills rendered on standard watchlist chart (`B` green / `S` red badges, hover cards, price level ticks).
+- [x] Apple Silicon multi-core thermal management distributing workload across all E-cores with background QoS.
+- [x] Full state persistence for saved layouts, workspace dock states, and demo accounts.

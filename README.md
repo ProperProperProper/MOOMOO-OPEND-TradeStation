@@ -1,6 +1,6 @@
 # MOOMOO-OPEND-TradeStation
 
-A fast, keyboard-driven market terminal in pure Rust: GPU charting with a Bloomberg Terminal look (dense tiled panes, monospace numbers, a command line like `AAPL <GO>`), **dedicated exclusively to Moomoo data via the local OpenD gateway** for your Moomoo account watchlist. Native compact UI, custom themes, and a fully dockable workspace with saved layouts.
+A fast, keyboard-driven market terminal in pure Rust: GPU charting with a Bloomberg Terminal aesthetic (dense tiled panes, monospace numbers, a command line like `AAPL <GO>`), **dedicated exclusively to Moomoo data via the local OpenD gateway** for your Moomoo account watchlist. Features native GPU rendering, an AI Quantitative Bot & Strategy Lab, dedicated Backtest Runner panes, multi-core Apple Silicon thermal management, custom themes, and a fully dockable workspace with persistent saved layouts.
 
 ![Terminal Overview](docs/img/overview.png)
 
@@ -11,47 +11,85 @@ A fast, keyboard-driven market terminal in pure Rust: GPU charting with a Bloomb
 
 ## Strict Security & Isolation Guarantees
 
-* **Moomoo OpenD Only**: The application connects exclusively to your local OpenD gateway (default `127.0.0.1:11111`).
-* **Watchlist-Restricted Data Feeds**: Market data quotes, history candles, searches, and tick streaming are **strictly restricted to instruments in your Moomoo account watchlist**. Any request for a security outside your watchlist is rejected.
-* **No External Internet Access (Loopback Enforced)**: All network operations are strictly validated against loopback addresses (`127.0.0.1`, `::1`, `localhost`). Outbound requests to remote internet IPs or domains are blocked with an immediate security alert.
-* **No TradingView Logins**: Zero TradingView authentication, cookies, sessions, or logins exist in the codebase.
-* **No Emailing or External Dispatching**: Zero email/SMTP libraries or services. All notifications and alerts display strictly on your local screen via **in-app desktop toasts**.
-* **Forbidden Protocols Blocked**: SSH, FTP, Telnet, and SMTP protocols and ports (20, 21, 22, 23, 25, 465, 587) are blocked by the built-in security firewall.
-* **Forbidden Webhooks**: Webhooks (Discord, Slack, or generic webhook URLs) are forbidden and blocked by network assertion.
-* **Zero Telemetry & No Auto-Updater**: Sparkle updater and all update commands have been permanently excised. The app has zero phone-home or analytics telemetry.
-* **Zero Keys in Git**: No account passwords, API secret keys, or tokens are stored or committed to the repository. Authentication is handled locally by your OpenD daemon.
+* **Moomoo OpenD Only**: Connects strictly to your local OpenD gateway (`127.0.0.1:11111`).
+* **Watchlist-Restricted Data Feeds**: Quotes, historical candles, searches, and tick streaming are **strictly restricted to instruments in your Moomoo account watchlist**. Any request for a security outside your watchlist is rejected.
+* **No External Internet Access (Loopback Enforced)**: All network operations are validated against loopback addresses (`127.0.0.1`, `::1`, `localhost`). Outbound internet traffic is blocked by the built-in firewall.
+* **No Third-Party Logins**: Zero TradingView authentication, cookies, sessions, or logins exist in the codebase.
+* **No Emailing or External Dispatching**: Zero email/SMTP libraries. All notifications display strictly via **in-app desktop toasts**.
+* **Forbidden Protocols Blocked**: SSH, FTP, Telnet, and SMTP protocols and ports (20, 21, 22, 23, 25, 465, 587) are rejected by network assertions.
+* **Forbidden Webhooks**: External webhooks (Discord, Slack, or generic URLs) are strictly blocked.
+* **Zero Telemetry & No Auto-Updater**: Sparkle updater and phone-home telemetry have been permanently excised.
+* **Zero Keys in Git**: No account passwords, API secret keys, or live account credentials are stored or committed to git. Authentication is managed locally by your OpenD daemon.
 
 > 📖 **Full Security Documentation**: See [SECURITY.md](SECURITY.md) and [docs/SECURITY_AUDIT_AND_HARDENING_REPORT.md](docs/SECURITY_AUDIT_AND_HARDENING_REPORT.md) for full phase-by-phase auditing, firewall architecture, and policy specifications.
 
 ---
 
-## Features
+## Core Capabilities & Architecture
 
-- **Multi-Asset with Bloomberg-Style Market Keys**: `AAPL <EQUITY>`, `NVDA <EQUITY>`, `MSFT <EQUITY>`, `SPY <EQUITY>`, `QQQ <EQUITY>`.
-- **Command Line and Search**: `<SECURITY> [<FUNCTION>] <GO>` (Enter is `<GO>`). Search is confined to your Moomoo account watchlist.
-- **Charts**: GPU-rendered candles, OHLC bars, line and area; 1m, 5m, 15m, 30m, 1H, 4H, 1D, 1W, 1M timeframes; log scale; crosshair with OHLC legend; smooth pan and zoom over 1M+ bars.
-- **151 Built-In Indicators**: Moving averages (SMA, EMA, WMA, Hull, DEMA, TEMA, KAMA, VWAP), bands/channels (Bollinger, Keltner, Donchian), momentum oscillators (RSI, MACD, Stochastic, CCI), volatility measures (ATR), and pivot-point families.
-- **Drawings**: Trendline (Alt+T), horizontal (Alt+H), vertical (Alt+V), and Fibonacci retracement (Alt+F).
-- **Moomoo Market Data Provider (`tr_data::MarketData`)**:
-  
-  | Asset Class | History | Quotes | Live Streaming |
-  |---|---|---|---|
-  | Moomoo Account Watchlist Equities & ETFs | Local Moomoo OpenD (`127.0.0.1:11111`) | Local Moomoo OpenD (`127.0.0.1:11111`) | Local Moomoo OpenD Streaming |
-  | Non-Watchlist Instruments | Blocked | Blocked | Blocked |
+### 1. Dual Charting Architecture (Strict Separation)
+- **Standard Watchlist Chart (`GP`)**:
+  - Displays real and paper historical executed order fills directly on candlestick bars.
+  - **Buy Fills (`B`)**: Green circle badge positioned below candle low.
+  - **Sell Fills (`S`)**: Red circle badge positioned above candle high.
+  - **Interactive Hover Cards**: Hovering reveals fill type, execution price, quantity, total dollar value, timestamp (UTC), and order ID.
+  - **Execution Price Ticks**: Subtle horizontal level ticks on the candle bar.
+  - **Stacking**: Multiple fills within the same timeframe candle stack vertically for full visibility.
+  - Zero simulated backtest trade markers appear on standard charts.
+- **Dedicated Backtest Runner Pane (`BT`)**:
+  - Distinct pane tabbed as `BT` with header: `🔬 BACKTEST RUNNER · SYMBOL · ★ Interval · Simulated Trades`.
+  - Shows simulated winning parameter trades without cluttering the operational watchlist chart.
+  - Quick-switch navigation buttons `[📈 Watchlist Chart]` and `[📊 Lab]`.
 
-- **Dockable Workspace**: Drag tabs and headers to split, tab, or pop out panes.
-- **Themes**: Built-in themes (Terminal Dark/Light, Bloomberg, High Contrast, Solarized, Nord, Monokai) plus live theme editor.
+### 2. AI Quantitative Bot & Strategy Lab (`AI` Pane)
+- Comprehensive quantitative research and execution module (`crates/strategy`).
+- **Interval Sweeps**: Parallel evaluation across 1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m, 9m, and 10m intervals.
+- **Hyperparameter Grid Optimization**: Evaluates entry models, exit breakdown triggers, lookback windows, stop losses, take profits, and trailing activations.
+- **Winning Parameter Promotion**: Automatically saves top-performing strategy parameters to `strategies/<SYMBOL>/paper.json` for live simulated execution.
+- **Live Strategy Runner**: Simulates paper order execution and maintains trade history with equity tracking.
+
+### 3. Apple Silicon Multi-Core Cooling Architecture
+- **E-Core Parallelism**: Research sweeps run across all available Apple Silicon Efficiency cores (e.g. 6 E-cores on Apple M4) using scoped concurrency (`std::thread::scope`).
+- **Thermal Governor & Background QoS**: Workers apply Darwin background Quality of Service (`QOS_CLASS_BACKGROUND: 0x09`).
+- **Hotspot & Throttling Prevention**: Spreads the computational load evenly across all E-cores, keeping Performance (P) cores cool, preventing CPU thermal hotspots, and avoiding fan throttling.
+
+### 4. GPU-Accelerated Charting Engine
+- **Rendering**: Pure `wgpu` Metal/Vulkan/DX12 GPU pipeline rendering 1M+ bars smoothly.
+- **Timeframes**: 1m, 2m, 3m, 5m, 8m, 15m, 30m, 1H, 4H, 1D, 1W, 1M with linear and logarithmic scales.
+- **151 Built-In Indicators**: Moving averages (SMA, EMA, WMA, Hull, DEMA, TEMA, KAMA, VWAP), volatility bands (Bollinger, Keltner, Donchian), momentum oscillators (RSI, MACD, Stochastic, CCI), and pivot points.
+- **Interactive Tools**: Trendlines (Alt+T), Horizontal Lines (Alt+H), Vertical Lines (Alt+V), Fibonacci Retracements (Alt+F).
+
+### 5. Persistent Workspace & Layouts
+- **Dockable Panels**: Tiling, splitting, tabbed groupings, and detached floating windows.
+- **Full Layout Lifecycle**: Create, save, switch, and delete layouts via the UI (`Layouts › Delete Layout...`) or command line (`DELETE LAYOUT <NAME> <GO>`).
+- **Complete Persistence**: All layout configurations, watchlist items, chart intervals, and demo trade histories persist atomically to application storage.
+
+---
+
+## Command Line & Navigation Shortcuts
+
+Enter acts as `<GO>`:
+
+| Command | Action |
+|---|---|
+| `<SYMBOL> <GO>` | Load chart for watchlist symbol (e.g., `MRNA <GO>`) |
+| `<SYMBOL> GP <GO>` | Open standard watchlist price chart with executed fills |
+| `<SYMBOL> BT <GO>` | Open dedicated backtest runner chart with simulated trades |
+| `<SYMBOL> STRAT <GO>` or `AI <GO>` | Open AI Quantitative Bot & Strategy Lab |
+| `SAVE LAYOUT <NAME> <GO>` | Save the current window and pane configuration |
+| `DELETE LAYOUT <NAME> <GO>` | Delete a saved layout |
+| `HELP <GO>` or `F1` | Show keyboard shortcuts and command reference |
 
 ---
 
 ## Running with Moomoo OpenD
 
 ### 1. Launch Moomoo OpenD
-Start your local Moomoo OpenD client (or Moomoo desktop app with External Access enabled):
+Start your local Moomoo OpenD gateway (or Moomoo desktop app with OpenD external access enabled):
 - Default address: `127.0.0.1:11111`
 - OpenD manages authentication locally on your computer.
 
-### 2. Run the Application
+### 2. Run the Terminal
 ```sh
 cargo run --release                          # Connects to local Moomoo OpenD (127.0.0.1:11111)
 MOOMOO_OPEND_ADDR=127.0.0.1:11111 cargo run  # Optional custom OpenD port/address
@@ -60,13 +98,19 @@ TR_PROVIDER=sample cargo run --release       # Fully offline sample mode
 
 ---
 
-## Testing & Verification
+## Testing & Quality Assurance
 
-Run the security test suite to verify firewall and watchlist constraints:
+Run the test suite across workspace crates:
 ```sh
+# Verify order fill synchronization and backtest marker separation
+cargo test --bin terminal -- standard_chart_separates_strategy_markers_and_syncs_order_fills
+
+# Verify OpenD loopback firewall and security constraints
 cargo test --package tr-moomoo
-```
-Run workspace-wide compile checks:
-```sh
+
+# Verify strategy governor and backtesting optimizer
+cargo test --package tr-strategy
+
+# Full workspace compilation check
 cargo check --workspace
 ```
