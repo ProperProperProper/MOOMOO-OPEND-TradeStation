@@ -1,6 +1,6 @@
 use tr_moomoo::Bar;
-use chrono::{DateTime, Timelike};
-use crate::model::{EntryMode, ExitMode, GridLevels, StrategyParams, StrategySignal};
+use chrono::{DateTime, Datelike, FixedOffset, NaiveDate, Timelike, Utc};
+use crate::model::{EntryMode, ExitMode, GridLevels, MarketSessionPhase, StrategyParams, StrategySignal};
 
 /// Calculates rolling causal price grid levels from prior completed high and low bars.
 pub fn calculate_grid_levels(
@@ -67,39 +67,99 @@ pub fn calculate_grid_levels(
     })
 }
 
-/// Checks if regular US trading hours entry is allowed given the configured open delay.
-pub fn is_entry_allowed(ts: i64, open_delay_minutes: usize) -> bool {
-    if let Some(dt) = DateTime::from_timestamp(ts, 0) {
-        // Approximate US market hours in UTC (Standard: 14:30 - 21:00 UTC, EDT: 13:30 - 20:00 UTC)
-        // Check local time hour and minute or timestamp of day
-        let hour = dt.hour();
-        let minute = dt.minute();
-        // If between 9:30 and 10:30 EST (represented as 13:30 - 14:30 / 14:30 - 15:30 UTC)
-        // Generic relative minutes from market open (assumed 9:30 AM EST)
-        let earliest_m = 30 + open_delay_minutes;
-        let entry_hour = 9 + earliest_m / 60;
-        let entry_min = earliest_m % 60;
+/// Translates any UTC timestamp to US Eastern Time (ET), accurately switching between
+/// Eastern Daylight Time (EDT: UTC-4) and Eastern Standard Time (EST: UTC-5).
+pub fn utc_to_us_eastern(ts: i64) -> Option<DateTime<FixedOffset>> {
+    let utc_dt = DateTime::from_timestamp(ts, 0)?;
+    let year = utc_dt.year();
 
-        let market_min_of_day = hour * 60 + minute;
-        // In US regular session, market opens at 9:30 AM EST.
-        // We ensure that if within the first hour of regular trading, delay has elapsed.
-        if (9 * 60 + 30..10 * 60 + 30).contains(&market_min_of_day) {
-            market_min_of_day >= (entry_hour * 60 + entry_min) as u32
-        } else {
-            true
-        }
+    // In the US, DST begins second Sunday in March at 02:00 local (07:00 UTC)
+    // and ends first Sunday in November at 02:00 local (06:00 UTC).
+    let march_first = NaiveDate::from_ymd_opt(year, 3, 1)?.and_hms_opt(0, 0, 0)?;
+    let march_first_weekday = march_first.weekday().num_days_from_sunday();
+    let second_sunday_day = if march_first_weekday == 0 { 8 } else { 1 + (7 - march_first_weekday) + 7 };
+    let dst_start_naive = NaiveDate::from_ymd_opt(year, 3, second_sunday_day)?.and_hms_opt(7, 0, 0)?;
+    let dst_start = DateTime::<Utc>::from_naive_utc_and_offset(dst_start_naive, Utc).timestamp();
+
+    let nov_first = NaiveDate::from_ymd_opt(year, 11, 1)?.and_hms_opt(0, 0, 0)?;
+    let nov_first_weekday = nov_first.weekday().num_days_from_sunday();
+    let first_sunday_day = if nov_first_weekday == 0 { 1 } else { 1 + (7 - nov_first_weekday) };
+    let dst_end_naive = NaiveDate::from_ymd_opt(year, 11, first_sunday_day)?.and_hms_opt(6, 0, 0)?;
+    let dst_end = DateTime::<Utc>::from_naive_utc_and_offset(dst_end_naive, Utc).timestamp();
+
+    let offset_seconds = if ts >= dst_start && ts < dst_end {
+        -4 * 3600 // EDT (UTC-4)
     } else {
-        true
+        -5 * 3600 // EST (UTC-5)
+    };
+
+    let offset = FixedOffset::east_opt(offset_seconds)?;
+    Some(utc_dt.with_timezone(&offset))
+}
+
+/// Evaluates the market session lifecycle phase for a given timestamp:
+/// - IdleOffSession: 17:00 ET through 08:30 ET (and weekends) -> Completely idle, doing nothing.
+/// - WakingPreSession: 08:30 ET to 09:30 ET (wakes 1 hour before session) -> Warm-up, prep quotes/levels, no entries.
+/// - OpenSessionActive: 09:30 ET to 16:00 ET -> Open session trading (with open delay if configured).
+/// - PostSessionWindDown: 16:00 ET to 17:00 ET (up to 1 hour after close) -> Position exit & settlement; idle at 17:00.
+pub fn get_market_session_phase(ts: i64) -> MarketSessionPhase {
+    let Some(et) = utc_to_us_eastern(ts) else {
+        return MarketSessionPhase::IdleOffSession;
+    };
+
+    // Weekends (Sunday=0, Saturday=6) are completely idle
+    let weekday = et.weekday().num_days_from_sunday();
+    if weekday == 0 || weekday == 6 {
+        return MarketSessionPhase::IdleOffSession;
+    }
+
+    let min_of_day = et.hour() * 60 + et.minute();
+    // 08:30 ET = 510 min
+    // 09:30 ET = 570 min
+    // 16:00 ET = 960 min
+    // 17:00 ET = 1020 min
+
+    if min_of_day < 510 || min_of_day >= 1020 {
+        MarketSessionPhase::IdleOffSession
+    } else if min_of_day < 570 {
+        MarketSessionPhase::WakingPreSession
+    } else if min_of_day < 960 {
+        MarketSessionPhase::OpenSessionActive
+    } else {
+        MarketSessionPhase::PostSessionWindDown
     }
 }
 
-/// Checks if session exit is due (30 minutes before regular close: 15:30 EST).
+/// Checks if entry is allowed. Requires:
+/// 1. Current phase must be `OpenSessionActive` (09:30 to 16:00 ET).
+/// 2. If within the first hour of trading, the configured `open_delay_minutes` must have elapsed.
+pub fn is_entry_allowed(ts: i64, open_delay_minutes: usize) -> bool {
+    let phase = get_market_session_phase(ts);
+    if phase != MarketSessionPhase::OpenSessionActive {
+        return false;
+    }
+
+    if let Some(et) = utc_to_us_eastern(ts) {
+        let min_of_day = et.hour() * 60 + et.minute();
+        let earliest_allowed = 9 * 60 + 30 + (open_delay_minutes as u32);
+        min_of_day >= earliest_allowed
+    } else {
+        false
+    }
+}
+
+/// Checks if session exit is due. True if in `PostSessionWindDown` (after 16:00 ET)
+/// or within the final 15 minutes of regular market close (>= 15:45 ET).
 pub fn is_session_exit_due(ts: i64) -> bool {
-    if let Some(dt) = DateTime::from_timestamp(ts, 0) {
-        let hour = dt.hour();
-        let minute = dt.minute();
-        // 15:30 EST to 16:00 EST
-        hour == 15 && minute >= 30
+    let phase = get_market_session_phase(ts);
+    if phase == MarketSessionPhase::PostSessionWindDown || phase == MarketSessionPhase::IdleOffSession {
+        return true;
+    }
+
+    if let Some(et) = utc_to_us_eastern(ts) {
+        let min_of_day = et.hour() * 60 + et.minute();
+        // 15:45 ET = 945 minutes (15 min before regular close)
+        min_of_day >= 15 * 60 + 45
     } else {
         false
     }

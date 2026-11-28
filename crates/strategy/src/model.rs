@@ -20,6 +20,49 @@ pub enum ExitMode {
     LowerHalfBreakdown,
 }
 
+/// Market session lifecycle phase:
+/// - IdleOffSession: 17:00 ET to 08:30 ET (and weekends) -> Completely idle outside open session.
+/// - WakingPreSession: 08:30 ET to 09:30 ET (1 hour before session open) -> Wakes up, pre-market quote/candle prep, flat.
+/// - OpenSessionActive: 09:30 ET to 16:00 ET -> Active open session trading (with open delay if configured).
+/// - PostSessionWindDown: 16:00 ET to 17:00 ET (1 hour after session close) -> Post-market settlement, closes open positions, idles at 17:00.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum MarketSessionPhase {
+    #[default]
+    IdleOffSession,
+    WakingPreSession,
+    OpenSessionActive,
+    PostSessionWindDown,
+}
+
+impl MarketSessionPhase {
+    pub fn badge_label(&self) -> &'static str {
+        match self {
+            Self::IdleOffSession => "🌙 IDLE (OFF-SESSION)",
+            Self::WakingPreSession => "🌅 WAKING UP (PRE-SESSION)",
+            Self::OpenSessionActive => "⚡ OPEN SESSION (ACTIVE)",
+            Self::PostSessionWindDown => "🌆 POST-SESSION (WIND-DOWN)",
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            Self::IdleOffSession => "Idle outside market hours (17:00–08:30 ET & weekends). Sleeping; zero network/CPU load.",
+            Self::WakingPreSession => "Wakes 1 hour before session open (08:30–09:30 ET). Ingesting pre-market quotes & calculating grid levels. Flat position enforced.",
+            Self::OpenSessionActive => "Regular market session active (09:30–16:00 ET). Full algorithmic execution & risk tracking.",
+            Self::PostSessionWindDown => "Post-session wind-down (16:00–17:00 ET). Exiting open positions; goes completely idle at 17:00 ET.",
+        }
+    }
+
+    pub fn is_active_trading(&self) -> bool {
+        matches!(self, Self::OpenSessionActive)
+    }
+
+    pub fn is_idle(&self) -> bool {
+        matches!(self, Self::IdleOffSession)
+    }
+}
+
 fn default_grid_lookback() -> usize { 45 }
 fn default_grid_intervals() -> usize { 4 }
 fn default_open_delay() -> usize { 5 }

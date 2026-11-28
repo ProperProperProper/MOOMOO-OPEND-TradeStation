@@ -2,8 +2,8 @@ use std::path::PathBuf;
 use anyhow::{bail, Result};
 use tr_moomoo::{clean_ticker, OpenDClient};
 use crate::exits::RiskTracker;
-use crate::grid::{evaluate_signals, is_entry_allowed, is_session_exit_due};
-use crate::model::{StrategyParams, SymbolPaperConfig, Trade};
+use crate::grid::{evaluate_signals, get_market_session_phase, is_entry_allowed, is_session_exit_due, utc_to_us_eastern};
+use crate::model::{MarketSessionPhase, StrategyParams, SymbolPaperConfig, Trade};
 use crate::optimizer::aggregate_bars;
 use crate::storage::{load_symbol_strategy, load_trading_system, save_symbol_strategy, save_trading_system};
 
@@ -15,6 +15,7 @@ pub struct PaperTradingBot {
     pub active_symbol: String,
     pub active_interval: usize,
     pub active_params: StrategyParams,
+    pub session_phase: MarketSessionPhase,
     pub running: bool,
     pub position_qty: f64,
     pub entry_price: f64,
@@ -34,6 +35,7 @@ impl PaperTradingBot {
             active_symbol: "US.MRNA".to_string(),
             active_interval: 8,
             active_params: StrategyParams::default(),
+            session_phase: MarketSessionPhase::IdleOffSession,
             running: false,
             position_qty: 0.0,
             entry_price: 0.0,
@@ -116,7 +118,44 @@ impl PaperTradingBot {
             return Ok(None);
         }
 
-        // 1. Fetch latest quote & balance from OpenD
+        let now_ts = chrono::Utc::now().timestamp();
+        let phase = get_market_session_phase(now_ts);
+        self.session_phase = phase;
+
+        let et_str = utc_to_us_eastern(now_ts)
+            .map(|et| et.format("%H:%M:%S ET").to_string())
+            .unwrap_or_else(|| "ET".into());
+
+        // 1. Off-Session / Sleep Phase (17:00 ET to 08:30 ET & weekends):
+        // Completely idle and doing NOTHING outside open session.
+        if phase == MarketSessionPhase::IdleOffSession {
+            self.status_message = format!("🌙 IDLE (Off-Session) · {} · Sleeping until 08:30 ET", et_str);
+            return Ok(None);
+        }
+
+        // 2. Pre-Session Wakeup Phase (08:30 ET to 09:30 ET - 1 hour before session open):
+        // Wakes up, warms up quotes and calculates grid levels, flat position enforced (zero new entries).
+        if phase == MarketSessionPhase::WakingPreSession {
+            if let Ok(quote) = self.client.fetch_quote(&self.active_symbol).await {
+                if let Ok(bars_1m) = self.client.fetch_1min_history(&self.active_symbol, 200).await {
+                    let bars = aggregate_bars(&bars_1m, self.active_interval);
+                    let _ = evaluate_signals(&bars, &self.active_params);
+                }
+                self.status_message = format!("🌅 WAKING UP (Pre-Session) · {} · Ready for 09:30 ET open (${:.2})", et_str, quote.last);
+            } else {
+                self.status_message = format!("🌅 WAKING UP (Pre-Session) · {} · Pre-market sync...", et_str);
+            }
+            return Ok(None);
+        }
+
+        // 3. Post-Session Wind-Down (16:00 ET to 17:00 ET - 1 hour after session close):
+        // Liquidates any remaining open position; once flat, stays idle until 17:00 ET.
+        if phase == MarketSessionPhase::PostSessionWindDown && self.position_qty == 0.0 {
+            self.status_message = format!("🌆 POST-SESSION (Wind-Down) · {} · Flat; idle at 17:00 ET", et_str);
+            return Ok(None);
+        }
+
+        // 4. Fetch latest quote & balance from OpenD
         let quote = match self.client.fetch_quote(&self.active_symbol).await {
             Ok(q) => q,
             Err(e) => {
@@ -127,7 +166,7 @@ impl PaperTradingBot {
 
         let current_price = quote.last;
 
-        // 2. Fetch 1m candles and aggregate
+        // 5. Fetch 1m candles and aggregate
         let bars_1m = self.client.fetch_1min_history(&self.active_symbol, 200).await.unwrap_or_default();
         if bars_1m.is_empty() {
             self.status_message = "Waiting for candles...".to_string();
@@ -139,7 +178,7 @@ impl PaperTradingBot {
 
         let latest_signal = signals.last();
 
-        // 3. Handle Active Position Exits
+        // 6. Handle Active Position Exits
         if self.position_qty > 0.0 {
             let mut risk_tracker = RiskTracker::new(
                 self.active_symbol.clone(),
@@ -153,14 +192,20 @@ impl PaperTradingBot {
 
             let mut exit_reason = None;
 
-            // Check intrabar risk exits (take profit, stop loss, trailing stop)
-            if let Some(r) = risk_tracker.evaluate_intrabar_exit(current_price) {
-                exit_reason = Some(r);
+            // Forced exit if in post-session wind-down window
+            if phase == MarketSessionPhase::PostSessionWindDown {
+                exit_reason = Some("POST_SESSION_CLOSE_EXIT");
             }
 
-            // Check session exit (30m before close)
+            // Check intrabar risk exits (take profit, stop loss, trailing stop)
+            if exit_reason.is_none()
+                && let Some(r) = risk_tracker.evaluate_intrabar_exit(current_price) {
+                    exit_reason = Some(r);
+                }
+
+            // Check session exit (final 15m of regular session or post-session)
             if exit_reason.is_none() && is_session_exit_due(quote.timestamp) {
-                exit_reason = Some("SESSION_EXIT_30M_BEFORE_CLOSE");
+                exit_reason = Some("SESSION_EXIT_WINDOW");
             }
 
             // Check candle open cross downward

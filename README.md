@@ -46,6 +46,11 @@ A fast, keyboard-driven market terminal in pure Rust: GPU charting with a Bloomb
 ### 2. DRBT-Grid: Dynamic Range-Break Trend Strategy & Bot Lab (`AI` Pane)
 - Comprehensive quantitative research and execution module (`crates/strategy`).
 - **DRBT-Grid Architecture**: Quantizes a rolling 45-period range into 4 adaptive quartile bands, capturing dynamic range breakouts and mean-reversion trends with asymmetric trailing stops.
+- **Session Lifecycle Governance (Auto-Idle & Pre-Session Wakeup)**:
+  - `🌙 IDLE (Off-Session)` (17:00–08:30 ET & Weekends): Completely idle and sleeping outside open session; consumes zero network and CPU resources.
+  - `🌅 WAKING UP (Pre-Session)` (08:30–09:30 ET): Wakes up 1 hour prior to session open to ingest pre-market quotes and compute opening grid levels. Zero new entries permitted.
+  - `⚡ OPEN SESSION (Active)` (09:30–16:00 ET): Executes active DRBT-Grid algorithmic entries and dynamic trailing exits.
+  - `🌆 POST-SESSION (Wind-Down)` (16:00–17:00 ET): 1 hour after session close to liquidate intraday positions, finalize daily settlement, and transition back to complete idle at 17:00 ET.
 - **Interval Sweeps**: Parallel evaluation across 1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m, 9m, and 10m intervals.
 - **Hyperparameter Grid Optimization**: Evaluates entry models, exit breakdown triggers, lookback windows, stop losses, take profits, and trailing activations.
 - **Winning Parameter Promotion**: Automatically saves top-performing strategy parameters to `strategies/<SYMBOL>/paper.json` for live simulated execution.

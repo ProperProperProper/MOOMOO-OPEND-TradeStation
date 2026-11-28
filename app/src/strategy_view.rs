@@ -119,6 +119,26 @@ pub fn strategy_panel(ui: &mut Ui, state: &mut StrategyPaneState) -> Vec<Action>
             };
             ui.label(RichText::new(badge_text).font(mono(11.0)).color(badge_color));
 
+            ui.add_space(dp(8.0));
+            ui.label(RichText::new("·").color(muted()));
+            ui.add_space(dp(8.0));
+
+            let now_ts = chrono::Utc::now().timestamp();
+            let phase = tr_strategy::get_market_session_phase(now_ts);
+            let et_clock = tr_strategy::utc_to_us_eastern(now_ts)
+                .map(|et| et.format("%H:%M:%S ET").to_string())
+                .unwrap_or_else(|| "--:--:-- ET".into());
+
+            let (phase_badge, phase_color) = match phase {
+                tr_strategy::MarketSessionPhase::IdleOffSession => ("🌙 IDLE (OFF-SESSION)", muted()),
+                tr_strategy::MarketSessionPhase::WakingPreSession => ("🌅 WAKING UP (PRE-SESSION)", amber()),
+                tr_strategy::MarketSessionPhase::OpenSessionActive => ("⚡ OPEN SESSION (ACTIVE)", up()),
+                tr_strategy::MarketSessionPhase::PostSessionWindDown => ("🌆 POST-SESSION (WIND-DOWN)", Color32::from_rgb(140, 180, 255)),
+            };
+
+            ui.label(RichText::new(format!("{} · {}", phase_badge, et_clock)).font(mono(11.0)).color(phase_color))
+                .on_hover_text(phase.description());
+
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if state.bot.running {
                     if ui.button(RichText::new("⏹ STOP BOT").color(down())).clicked() {

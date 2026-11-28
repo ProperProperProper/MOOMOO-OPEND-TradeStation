@@ -12,8 +12,8 @@ pub mod storage;
 pub mod bot;
 pub mod governor;
 
-pub use model::{BacktestResult, EntryMode, ExitMode, GridLevels, PromotionGate, StrategyMarker, StrategyParams, StrategySignal, SymbolPaperConfig, Trade, TradingSystemConfig};
-pub use grid::{calculate_grid_levels, evaluate_signals, strategy_signal_latest};
+pub use model::{BacktestResult, EntryMode, ExitMode, GridLevels, MarketSessionPhase, PromotionGate, StrategyMarker, StrategyParams, StrategySignal, SymbolPaperConfig, Trade, TradingSystemConfig};
+pub use grid::{calculate_grid_levels, evaluate_signals, get_market_session_phase, is_entry_allowed, is_session_exit_due, strategy_signal_latest, utc_to_us_eastern};
 pub use exits::RiskTracker;
 pub use backtest::{run_backtest, trades_to_markers};
 pub use optimizer::{aggregate_bars, evaluate_promotion_gate, generate_candidates, run_interval_sweep};
@@ -150,5 +150,55 @@ mod tests {
         let gate = evaluate_promotion_gate(&candidate, &base, 2);
         assert!(gate.allowed);
         assert!(gate.beats_baseline);
+    }
+
+    #[test]
+    fn test_market_session_lifecycle() {
+        // Wednesday, Oct 14, 2026 (EDT is UTC-4: subtract 4 hours from UTC to get ET)
+        // 04:00 ET -> 08:00 UTC
+        let ts_off_session = 1791964800; // 2026-10-14 08:00:00 UTC = 04:00:00 EDT
+        assert_eq!(get_market_session_phase(ts_off_session), MarketSessionPhase::IdleOffSession);
+        assert!(!is_entry_allowed(ts_off_session, 5));
+
+        // 08:30 ET -> 12:30 UTC (wakes 1 hour before session open)
+        let ts_pre_session_start = 1791981000; // 2026-10-14 12:30:00 UTC = 08:30:00 EDT
+        assert_eq!(get_market_session_phase(ts_pre_session_start), MarketSessionPhase::WakingPreSession);
+        assert!(!is_entry_allowed(ts_pre_session_start, 5)); // No entries during pre-market prep
+
+        // 09:15 ET -> 13:15 UTC (still pre-session)
+        let ts_pre_session_mid = 1791983700; // 2026-10-14 13:15:00 UTC = 09:15:00 EDT
+        assert_eq!(get_market_session_phase(ts_pre_session_mid), MarketSessionPhase::WakingPreSession);
+        assert!(!is_entry_allowed(ts_pre_session_mid, 5));
+
+        // 09:32 ET -> 13:32 UTC (open session, but 5m open delay has not elapsed)
+        let ts_open_delayed = 1791984720; // 2026-10-14 13:32:00 UTC = 09:32:00 EDT
+        assert_eq!(get_market_session_phase(ts_open_delayed), MarketSessionPhase::OpenSessionActive);
+        assert!(!is_entry_allowed(ts_open_delayed, 5));
+
+        // 09:36 ET -> 13:36 UTC (open session, 5m open delay elapsed -> allowed!)
+        let ts_open_active = 1791984960; // 2026-10-14 13:36:00 UTC = 09:36:00 EDT
+        assert_eq!(get_market_session_phase(ts_open_active), MarketSessionPhase::OpenSessionActive);
+        assert!(is_entry_allowed(ts_open_active, 5));
+        assert!(!is_session_exit_due(ts_open_active));
+
+        // 15:50 ET -> 19:50 UTC (final 15m before close -> exit due)
+        let ts_near_close = 1792007400; // 2026-10-14 19:50:00 UTC = 15:50:00 EDT
+        assert_eq!(get_market_session_phase(ts_near_close), MarketSessionPhase::OpenSessionActive);
+        assert!(is_session_exit_due(ts_near_close));
+
+        // 16:15 ET -> 20:15 UTC (post-session wind-down: 1 hour after close)
+        let ts_post_session = 1792008900; // 2026-10-14 20:15:00 UTC = 16:15:00 EDT
+        assert_eq!(get_market_session_phase(ts_post_session), MarketSessionPhase::PostSessionWindDown);
+        assert!(!is_entry_allowed(ts_post_session, 5));
+        assert!(is_session_exit_due(ts_post_session));
+
+        // 17:05 ET -> 21:05 UTC (after 17:00 ET -> completely idle until 08:30 next morning)
+        let ts_evening_idle = 1792011900; // 2026-10-14 21:05:00 UTC = 17:05:00 EDT
+        assert_eq!(get_market_session_phase(ts_evening_idle), MarketSessionPhase::IdleOffSession);
+        assert!(!is_entry_allowed(ts_evening_idle, 5));
+
+        // Saturday Oct 17, 2026 12:00 ET -> Weekend is completely idle
+        let ts_weekend = 1792252800;
+        assert_eq!(get_market_session_phase(ts_weekend), MarketSessionPhase::IdleOffSession);
     }
 }
