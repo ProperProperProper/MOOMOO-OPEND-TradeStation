@@ -1,6 +1,6 @@
 # MOOMOO-OPEND-TradeStation
 
-A fast, keyboard-driven market terminal in pure Rust: GPU charting with a Bloomberg Terminal aesthetic (dense tiled panes, monospace numbers, a command line like `AAPL <GO>`), **dedicated exclusively to Moomoo data via the local OpenD gateway** for your Moomoo account watchlist. Features native GPU rendering, an AI Quantitative Bot & Strategy Lab, dedicated Backtest Runner panes, multi-core Apple Silicon thermal management, custom themes, and a fully dockable workspace with persistent saved layouts.
+An automated, strategy-driven, and AI-driven quantitative trading platform and autonomous execution engine in pure Rust: powered exclusively by your local Moomoo OpenD gateway (`127.0.0.1:11111`) for your Moomoo account watchlist. Combines high-performance native GPU charting (wgpu/Metal) with automated algorithmic trading (DRBT-Grid), AI-assisted hyperparameter optimization, rigorous multi-session evidence promotion gates, single-position-per-symbol portfolio constraints, multi-core Apple Silicon thermal management, and full session lifecycle automation.
 
 <img width="1463" height="882" alt="Screenshot 2026-11-29 at 1 09 36 AM" src="https://github.com/user-attachments/assets/b2df8e69-f457-4c16-9851-8688b8a4c4e6" />
 

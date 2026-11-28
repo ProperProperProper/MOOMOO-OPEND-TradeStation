@@ -170,6 +170,18 @@ pub struct SymbolPaperConfig {
     pub updated_at: String,
 }
 
+/// Active paper position for a single symbol.
+/// Hard rule: At most one position can exist per symbol at any time.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PaperPosition {
+    pub symbol: String,
+    pub qty: f64,
+    pub entry_price: f64,
+    pub peak_price: f64,
+    pub trailing_armed: bool,
+    pub entry_time: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GridLevels {
     pub bottom: f64,

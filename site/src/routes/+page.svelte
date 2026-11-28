@@ -193,8 +193,8 @@
 		<div class="logo"><Logo size={112} /></div>
 		<h1>The market, one command away.</h1>
 		<p class="lede">
-			A fast, keyboard-driven market terminal for the Mac, written in Rust. Type a ticker, press GO,
-			and the chart is already there.
+			An automated, strategy-driven, and AI-driven quantitative trading platform and autonomous
+			execution engine for the Mac, written in Rust. Dedicated to your local Moomoo OpenD gateway.
 		</p>
 		<div class="cta">
 			<a class="download" href={resolve('/download')} onclick={download}>

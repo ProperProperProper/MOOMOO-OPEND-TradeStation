@@ -194,6 +194,10 @@ pub fn generate_candidates(count: usize, base: &StrategyParams) -> Vec<StrategyP
     candidates
 }
 
+/// Minimum trades required across evaluation period for statistical significance.
+/// Prevents switching/promoting strategies on tiny sample noise (e.g. 2 trades over 5 days).
+pub const MIN_PROMOTION_TRADES: usize = 5;
+
 /// Evaluates if a backtest result qualifies for paper strategy promotion according to evidence gates.
 pub fn evaluate_promotion_gate(
     candidate: &BacktestResult,
@@ -208,10 +212,13 @@ pub fn evaluate_promotion_gate(
         };
     }
 
-    if candidate.total_trades < 2 {
+    if candidate.total_trades < MIN_PROMOTION_TRADES {
         return PromotionGate {
             allowed: false,
-            reason: format!("insufficient trades ({} < 2)", candidate.total_trades),
+            reason: format!(
+                "insufficient trades ({} < {}; minimum {} trades required over evaluation period)",
+                candidate.total_trades, MIN_PROMOTION_TRADES, MIN_PROMOTION_TRADES
+            ),
             beats_baseline: false,
         };
     }

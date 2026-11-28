@@ -12,11 +12,11 @@ pub mod storage;
 pub mod bot;
 pub mod governor;
 
-pub use model::{BacktestResult, EntryMode, ExitMode, GridLevels, MarketSessionPhase, PromotionGate, StrategyMarker, StrategyParams, StrategySignal, SymbolPaperConfig, Trade, TradingSystemConfig};
+pub use model::{BacktestResult, EntryMode, ExitMode, GridLevels, MarketSessionPhase, PaperPosition, PromotionGate, StrategyMarker, StrategyParams, StrategySignal, SymbolPaperConfig, Trade, TradingSystemConfig};
 pub use grid::{calculate_grid_levels, evaluate_signals, get_market_session_phase, is_entry_allowed, is_session_exit_due, strategy_signal_latest, utc_to_us_eastern};
 pub use exits::RiskTracker;
 pub use backtest::{run_backtest, trades_to_markers};
-pub use optimizer::{aggregate_bars, evaluate_promotion_gate, generate_candidates, run_interval_sweep};
+pub use optimizer::{aggregate_bars, evaluate_promotion_gate, generate_candidates, run_interval_sweep, MIN_PROMOTION_TRADES};
 pub use storage::{load_symbol_strategy, load_trading_system, save_symbol_strategy, save_trading_system, symbol_slug};
 pub use bot::PaperTradingBot;
 pub use governor::{apply_cooling_qos, check_thermal_status, detect_cpu_topology, get_governor_state, pace_for_cooling, CpuTopology, GovernorState, ThermalStatus};
@@ -170,7 +170,14 @@ mod tests {
         let gate = evaluate_promotion_gate(&candidate, &base, 1);
         assert!(!gate.allowed);
 
-        // Succeeds with 2 sessions and higher return
+        // Fails with < 5 trades (e.g. 2 trades over 5 days rejected for insufficient sample size)
+        let mut low_trades = candidate.clone();
+        low_trades.total_trades = 2;
+        let gate_low_trades = evaluate_promotion_gate(&low_trades, &base, 5);
+        assert!(!gate_low_trades.allowed);
+        assert!(gate_low_trades.reason.contains("insufficient trades"));
+
+        // Succeeds with 2 sessions, >= 5 trades, and higher return
         let gate = evaluate_promotion_gate(&candidate, &base, 2);
         assert!(gate.allowed);
         assert!(gate.beats_baseline);

@@ -187,39 +187,41 @@ pub fn strategy_panel(ui: &mut Ui, state: &mut StrategyPaneState) -> Vec<Action>
             ui.label(RichText::new("Active Symbol:").font(ui_font(11.0)).color(muted()));
             for sym in &state.available_symbols {
                 let is_selected = sym.eq_ignore_ascii_case(&state.symbol);
-                let btn = egui::Button::new(RichText::new(sym).font(mono(11.0)))
+                let has_pos = state.bot.has_open_position(sym);
+                let label_text = if has_pos {
+                    format!("🟢 {sym}")
+                } else {
+                    sym.clone()
+                };
+                let btn = egui::Button::new(RichText::new(label_text).font(mono(11.0)))
                     .fill(if is_selected { Color32::from_rgb(30, 60, 90) } else { Color32::TRANSPARENT })
                     .stroke(Stroke::new(1.0, if is_selected { amber() } else { Color32::from_gray(60) }));
 
                 if ui.add(btn).clicked() {
-                    if state.bot.position_qty > 0.0 {
-                        state.status_message = "⚠️ Rejected: Cannot switch symbol while holding open position".into();
-                    } else {
-                        state.symbol = sym.clone();
-                        let _ = state.bot.switch_symbol(sym);
-                        if let Ok(strat) = tr_strategy::load_symbol_strategy(&PathBuf::from("."), sym) {
-                            state.active_params = strat.params;
-                            state.active_interval = strat.interval;
-                        }
-                        let bars_1m = load_real_history(sym, 3000);
-                        let intervals: Vec<usize> = (1..=10).collect();
-                        let results = run_interval_sweep(sym, &bars_1m, &intervals, &state.active_params, 100_000.0);
-                        if let Some(winner) = results.first() {
-                            let baseline_res = run_backtest(
-                                sym,
-                                state.active_interval,
-                                &aggregate_bars(&bars_1m, state.active_interval),
-                                &state.active_params,
-                                100_000.0,
-                                0.95,
-                                2.0,
-                                0.0,
-                            );
-                            state.promotion_status = Some(evaluate_promotion_gate(winner, &baseline_res, 5));
-                        }
-                        state.sweep_results = results;
-                        actions.push(Action::OpenChart(sym.clone()));
+                    state.symbol = sym.clone();
+                    let _ = state.bot.switch_symbol(sym);
+                    if let Ok(strat) = tr_strategy::load_symbol_strategy(&PathBuf::from("."), sym) {
+                        state.active_params = strat.params;
+                        state.active_interval = strat.interval;
                     }
+                    let bars_1m = load_real_history(sym, 3000);
+                    let intervals: Vec<usize> = (1..=10).collect();
+                    let results = run_interval_sweep(sym, &bars_1m, &intervals, &state.active_params, 100_000.0);
+                    if let Some(winner) = results.first() {
+                        let baseline_res = run_backtest(
+                            sym,
+                            state.active_interval,
+                            &aggregate_bars(&bars_1m, state.active_interval),
+                            &state.active_params,
+                            100_000.0,
+                            0.95,
+                            2.0,
+                            0.0,
+                        );
+                        state.promotion_status = Some(evaluate_promotion_gate(winner, &baseline_res, 5));
+                    }
+                    state.sweep_results = results;
+                    actions.push(Action::OpenChart(sym.clone()));
                 }
             }
         });
@@ -382,22 +384,23 @@ pub fn strategy_panel(ui: &mut Ui, state: &mut StrategyPaneState) -> Vec<Action>
             }
         });
 
-        // Promotion Gate Card
+        // Promotion Gate Card (Auto-switch is OFF; strictly requires explicit trader promotion)
         if let Some(gate) = &state.promotion_status {
             ui.add_space(dp(6.0));
             let color = if gate.allowed { up() } else { down() };
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Evidence Gate:").font(mono(11.0)).color(color));
                 ui.label(RichText::new(&gate.reason).font(mono(11.0)).color(text()));
+                ui.label(RichText::new("· Auto-Switch: OFF").font(mono(11.0)).color(muted()));
                 if gate.allowed
                     && ui.button(RichText::new("🚀 PROMOTE WINNER TO PAPER").color(up())).clicked() {
-                        if state.bot.position_qty > 0.0 {
-                            state.status_message = "⚠️ Rejected: Cannot promote strategy while holding open position".into();
+                        if state.bot.has_open_position(&state.symbol) {
+                            state.status_message = format!("⚠️ Rejected: Cannot promote strategy while holding open position in {}", state.symbol);
                         } else if let Some(winner) = state.sweep_results.first() {
                             let _ = state.bot.promote_winner(&state.symbol, winner.interval, winner.params.clone());
                             state.active_interval = winner.interval;
                             state.active_params = winner.params.clone();
-                            state.status_message = format!("Promoted {}m winner into paper strategy!", winner.interval);
+                            state.status_message = format!("Promoted {}m winner into paper strategy for {}!", winner.interval, state.symbol);
                         }
                     }
             });

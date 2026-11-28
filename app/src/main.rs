@@ -1,5 +1,5 @@
-//! Terminal: a keyboard-driven, Bloomberg-style market terminal with GPU charts and
-//! congressional (STOCK Act) trade tracking.
+//! Terminal: an automated, strategy-driven, and AI-driven quantitative trading platform
+//! and autonomous execution engine with GPU charts and local Moomoo OpenD integration.
 
 mod anim;
 mod app;
