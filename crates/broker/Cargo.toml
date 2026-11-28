@@ -3,6 +3,7 @@ name = "tr-broker"
 description = "Brokerage accounts through Moomoo OpenD: signed API client, portfolio model, order entry and credential storage"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
 tr-core.workspace = true

@@ -193,9 +193,50 @@ fn bundle_macos(root: &Path, bin_opt: Option<PathBuf>) -> Result<()> {
         let _ = Command::new("plutil")
             .args(["-lint", plist_path.to_str().unwrap()])
             .output();
+
+        sign_bundle_hardened(root, &app)?;
     }
 
     println!("Bundled macOS Application successfully: {}", app.display());
+    Ok(())
+}
+
+/// Signs the macOS .app bundle with Hardened Runtime enabled, preventing local dylib tampering.
+fn sign_bundle_hardened(root: &Path, app: &Path) -> Result<()> {
+    let entitlements = root.join("app/assets/entitlements.plist");
+    let identity = std::env::var("CODESIGN_IDENTITY")
+        .or_else(|_| std::env::var("APPLE_SIGNING_IDENTITY"))
+        .unwrap_or_else(|_| "-".to_string());
+
+    println!("🔒 Applying macOS Hardened Runtime code signature to: {}", app.display());
+    println!("   - Identity: {}", identity);
+    println!("   - Options: runtime (flags=0x10000 CS_RUNTIME)");
+    println!("   - Policy: Library Validation enforced (prevents local dylib tampering)");
+
+    let mut cmd = Command::new("codesign");
+    cmd.args(["--force", "--deep", "--options", "runtime"]);
+
+    if entitlements.exists() {
+        cmd.arg("--entitlements").arg(&entitlements);
+    }
+    cmd.arg("--sign").arg(&identity).arg(app);
+
+    let status = cmd.status().context("Failed to execute codesign")?;
+    if !status.success() {
+        bail!("Code signing with Hardened Runtime failed with status {}", status);
+    }
+
+    // Verify signature
+    let verify_status = Command::new("codesign")
+        .args(["--verify", "--deep", "--strict", "--verbose=2"])
+        .arg(app)
+        .status()
+        .context("Failed to verify code signature")?;
+    if !verify_status.success() {
+        bail!("Code signature verification failed with status {}", verify_status);
+    }
+
+    println!("✅ macOS Hardened Runtime successfully applied and verified.");
     Ok(())
 }
 

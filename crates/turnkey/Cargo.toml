@@ -3,6 +3,7 @@ name = "tr-turnkey"
 description = "Built-in wallets on Turnkey: the device's session key and request stamps, the few Turnkey calls Terminal makes, and the desktop sign-in's loopback callback"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [features]
 # An in-process stand-in for Turnkey's API and sign-in page, for tests and screenshots.

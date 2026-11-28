@@ -1,5 +1,5 @@
 {
-  "active_symbol": "US.MRNA",
+  "active_symbol": "US.ANT",
   "active_symbols": [
     "US.MRNA",
     "US.ANT",
@@ -7,7 +7,10 @@
     "US.MU",
     "US.SNDK",
     "US.OMH",
-    "US.APP"
+    "US.APP",
+    "US.AAPL",
+    "US.ADMA",
+    "US.ADP"
   ],
   "market": "US",
   "minute_intervals": [
@@ -23,8 +26,7 @@
     10
   ],
   "mode": "SIMULATE",
-  "paper_account_env": "PAPER_ACCOUNT_ID",
   "portfolio_allocation": 0.95,
   "research_workers": 2,
-  "max_cpu_percent": 78
+  "max_cpu_percent": 78.0
 }

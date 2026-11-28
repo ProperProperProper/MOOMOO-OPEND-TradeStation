@@ -20,6 +20,8 @@ A fast, keyboard-driven market terminal in pure Rust: GPU charting with a Bloomb
 * **Forbidden Webhooks**: External webhooks (Discord, Slack, or generic URLs) are strictly blocked.
 * **Zero Telemetry & No Auto-Updater**: Sparkle updater and phone-home telemetry have been permanently excised.
 * **Zero Keys in Git**: No account passwords, API secret keys, or live account credentials are stored or committed to git. Authentication is managed locally by your OpenD daemon.
+* **Dependency Supply-Chain Lock (`cargo-deny`)**: Automated policy-based crate auditing enforcing zero known CVEs, banning vulnerable cryptographic routines (`md5`, `des`, `rc4`, `blowfish`, `openssl-sys`), banning undeclared remote network libraries (`curl`, `ssh2`, `ftp`, `telnet`, `smtp`), requiring trusted registries, and validating license compliance across all workspace dependencies. Enforced via CI and pre-commit/pre-push git hooks.
+* **macOS Hardened Runtime**: Bundled application executes with Apple Hardened Runtime (`--options runtime`, flags `0x10000`) and strict Library Validation enforced (`app/assets/entitlements.plist`). Prevents local dynamic library (`.dylib`) tampering, injection attacks (`DYLD_INSERT_LIBRARIES`), and unauthorized debugger memory attachment. Verified via `scripts/verify-hardened-runtime.sh`.
 
 > 📖 **Full Security Documentation**: See [SECURITY.md](SECURITY.md) and [docs/SECURITY_AUDIT_AND_HARDENING_REPORT.md](docs/SECURITY_AUDIT_AND_HARDENING_REPORT.md) for full phase-by-phase auditing, firewall architecture, and policy specifications.
 

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- ========================================================================= -->
+    <!-- macOS Hardened Runtime & Dylib Tampering Protections                     -->
+    <!-- ========================================================================= -->
+
+    <!-- Library Validation: Enforces that all loaded dynamic libraries (.dylib)    -->
+    <!-- and frameworks must be signed by Apple or with the same Developer Team ID. -->
+    <!-- This strictly prevents local dylib hijacking, tampering, and substitution. -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <false/>
+
+    <!-- DYLD Environment Variables: Prevents DYLD_INSERT_LIBRARIES,                -->
+    <!-- DYLD_LIBRARY_PATH, and DYLD_FRAMEWORK_PATH from injecting rogue libraries. -->
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <false/>
+
+    <!-- Unsigned Executable Memory: Prevents execution of arbitrary/unverified memory. -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <false/>
+
+    <!-- Just-In-Time (JIT) Compilation: Disabled for pure native compiled Rust.    -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <false/>
+
+    <!-- Debugging: Disallows untrusted processes from attaching to memory.         -->
+    <key>com.apple.security.cs.debugger</key>
+    <false/>
+
+    <!-- Outbound Network Client: Permits socket connections strictly to local     -->
+    <!-- loopback Moomoo OpenD (127.0.0.1:11111). Outbound public access is blocked -->
+    <!-- by the application loopback firewall.                                     -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+</dict>
+</plist>

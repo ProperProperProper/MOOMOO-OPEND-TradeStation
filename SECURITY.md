@@ -29,6 +29,8 @@ The following strict security constraints are enforced in the source code:
 | **No TradingView Logins** | No TradingView credentials, sessions, cookies, or account logins. | Codebase audited; zero TradingView auth handlers exist. |
 | **Zero Auto-Updater / Telemetry** | No background checking or downloading of application updates. | Sparkle framework, update commands, and release feed checkers permanently deleted. |
 | **Zero Credentials in Git** | No passwords, private keys, API keys, or tokens stored in repo. | Strict `.gitignore` rules and full diff audit verifying zero secrets committed. |
+| **Dependency Supply-Chain Lock** | Enforce policy-based crate auditing; ban weak crypto, rogue networking, unvetted registries. | `deny.toml`, `scripts/supply-chain-audit.sh`, git hooks (`pre-commit`, `pre-push`), and CI audit workflow. |
+| **macOS Hardened Runtime** | Prevent local dynamic library tampering, dylib hijacking, and memory debugging. | `app/assets/entitlements.plist`, `codesign --options runtime`, `cargo xtask bundle-macos`, and `scripts/verify-hardened-runtime.sh`. |
 
 ---
 
@@ -94,6 +96,34 @@ Every script in `scripts/` was audited:
 * **.gitignore**: Updated with comprehensive ignore rules for `.env*`, `*.key`, `*.pem`, `*.secret`, `*token*`, and JSON credential files.
 * **Pre-Push Diff Scan**: Scanned all commits (`git diff origin/master..HEAD`) to verify zero passwords, secret keys, or authentication tokens were staged.
 * **Authentication Method**: The terminal relies entirely on the local Moomoo OpenD process running on `127.0.0.1:11111` for authentication.
+
+### Step 9: Dependency Supply-Chain Lock (`cargo-deny`)
+* **Policy Configuration (`deny.toml`)**:
+  * **Advisories**: Continuously scans RustSec vulnerability database for known CVEs.
+  * **Banned Cryptographic Routines**: Explicitly bans legacy/broken algorithms (`md5`, `des`, `rc4`, `blowfish`) and unvetted C bindings (`openssl-sys`), enforcing pure-Rust memory-safe crypto.
+  * **Banned Network Libraries**: Explicitly bans undeclared remote protocols and network stacks (`curl`, `curl-sys`, `ssh2`, `libssh2-sys`, `ftp`, `suppaftp`, `telnet`, `lettre`, `smtp`, `isahc`) ensuring all terminal traffic strictly traverses loopback OpenD.
+  * **License Compliance**: Restricts allowed open-source licenses to permissive industry standards (`MIT`, `Apache-2.0`, `BSD-2/3`, `0BSD`, `ISC`, `Zlib`, `CC0-1.0`, etc.) and enforces `[licenses.private] ignore = true` for proprietary/internal crates.
+  * **Source Integrity**: Strictly disallows unvetted git sources and alternative package registries, requiring verified crates.io index sources.
+* **Automated Audit Script (`scripts/supply-chain-audit.sh`)**:
+  * Runs all 4 check phases (`advisories`, `bans`, `licenses`, `sources`) with single-command invocation.
+* **Git Hook Enforcement (`scripts/install-git-hooks.sh`)**:
+  * Automatically installs executable `pre-commit` and `pre-push` hooks blocking commits or pushes if supply chain violations are introduced.
+* **Continuous Integration (`.github/workflows/security-audit.yml`)**:
+  * Automated GitHub Actions pipeline verifying supply-chain assertions on all pushes and PRs touching manifests or lockfiles.
+
+### Step 10: macOS Hardened Runtime & Dylib Tampering Protections
+* **Security Threat Prevented**: Local dynamic library tampering, malicious dylib substitution/hijacking, `DYLD_INSERT_LIBRARIES` / `DYLD_LIBRARY_PATH` injection, and unauthorized debugger memory attachment.
+* **Hardened Runtime Entitlements (`app/assets/entitlements.plist`)**:
+  * `com.apple.security.cs.disable-library-validation` (`false`): Enforces Library Validation so macOS will only load dylibs and frameworks signed by Apple or matching the application's developer identity.
+  * `com.apple.security.cs.allow-dyld-environment-variables` (`false`): Ignores dynamic linker environment overrides to prevent runtime code injection.
+  * `com.apple.security.cs.allow-unsigned-executable-memory` (`false`): Blocks execution of arbitrary memory pages.
+  * `com.apple.security.cs.allow-jit` (`false`): JIT compilation disabled for native Rust code.
+  * `com.apple.security.cs.debugger` (`false`): Prevents unauthorized processes from attaching with `ptrace`.
+  * `com.apple.security.network.client` (`true`): Outbound socket permission scoped exclusively to loopback OpenD (`127.0.0.1:11111`).
+* **Native Rust Bundling & Signing (`xtask/src/main.rs`)**:
+  * Bundler runs `codesign --force --deep --options runtime --entitlements app/assets/entitlements.plist --sign <identity> <app>` on macOS builds, stamping the Mach-O binary with `CS_RUNTIME` (0x10000).
+* **Automated Hardened Runtime Audit (`scripts/verify-hardened-runtime.sh`)**:
+  * Inspects code signature integrity, verifies `flags=0x10002(adhoc,runtime)` or developer runtime flags, and confirms library validation entitlement is actively enforced.
 
 ---
 
