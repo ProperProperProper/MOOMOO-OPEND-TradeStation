@@ -1,8 +1,12 @@
 [package]
 name = "tr-moomoo"
+description = "Hardened local Moomoo OpenD client with loopback firewall and watchlist gatekeeper"
 version = "0.1.0"
 edition = "2024"
 license.workspace = true
+repository.workspace = true
+keywords = ["moomoo", "opend", "market-data", "security", "firewall"]
+categories = ["finance", "network-programming"]
 
 [dependencies]
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }

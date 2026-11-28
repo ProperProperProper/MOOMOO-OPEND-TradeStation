@@ -1,8 +1,12 @@
 [package]
 name = "tr-strategy"
+description = "Quantitative DRBT-Grid strategy engine, next-bar backtester, and autonomous paper trading bot"
 version = "0.1.0"
 edition = "2024"
 license.workspace = true
+repository.workspace = true
+keywords = ["algorithmic-trading", "backtesting", "strategy-optimization", "quantitative-finance"]
+categories = ["finance", "science"]
 
 [dependencies]
 tr-core = { path = "../core" }
