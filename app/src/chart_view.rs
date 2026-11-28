@@ -91,6 +91,7 @@ pub struct ChartState {
     pub is_backtest_chart: bool,
     pub strategy_markers: Vec<tr_strategy::StrategyMarker>,
     pub order_fill_markers: Vec<OrderFillMarker>,
+    pub open_position_qty: f64,
     pub indicators: Vec<IndicatorSpec>,
     pub drawings: Vec<Drawing>,
     pub compare: Option<String>,
@@ -156,6 +157,7 @@ impl ChartState {
             is_backtest_chart: false,
             strategy_markers: Vec::new(),
             order_fill_markers: Vec::new(),
+            open_position_qty: 0.0,
             indicators: crate::command::default_indicators(),
             drawings: Vec::new(),
             compare: None,
@@ -1050,7 +1052,7 @@ impl ChartState {
             }
         }
         self.paint_legend(ui, price_rect, hovered_bar.unwrap_or(len.saturating_sub(1)), &sub_rects);
-        if matches!(self.sec.class, tr_core::AssetClass::Equity | tr_core::AssetClass::Etf) {
+        if !self.is_backtest_chart && matches!(self.sec.class, tr_core::AssetClass::Equity | tr_core::AssetClass::Etf) {
             clicked |= self.trade_buttons(ui, plot_all);
         }
 
@@ -1058,28 +1060,33 @@ impl ChartState {
         clicked
     }
 
-    /// Buy / Sell buttons in the plot's top-right corner: they open the order ticket.
+    /// Sell button in the plot's top-right corner: only appears when there is an open position.
     fn trade_buttons(&mut self, ui: &mut Ui, plot: Rect) -> bool {
-        let h = 20.0;
-        let mut x = plot.right() - 8.0;
-        let mut clicked = false;
-        for (label, cmd, color, tip) in
-            [("SELL", "SELL", theme::down(), "Sell (⇧S)"), ("BUY", "BUY", theme::up(), "Buy (⇧B)")]
-        {
-            let g = ui.painter().layout_no_wrap(label.into(), mono(11.0), Color32::WHITE);
-            let w = g.size().x + 18.0;
-            let r = Rect::from_min_size(pos2(x - w, plot.top() + 6.0), vec2(w, h));
-            x -= w + 6.0;
-            let resp = ui.interact(r, ui.id().with((self.id, "trade", label)), Sense::click()).on_hover_text(tip);
-            let fill = if resp.hovered() { color } else { color.gamma_multiply(0.8) };
-            let p = ui.painter();
-            p.rect_filled(r, h / 2.0, fill);
-            p.galley(r.center() - g.size() / 2.0, g, Color32::WHITE);
-            if resp.clicked() {
-                self.actions.push(Action::Command(format!("{cmd} {}", self.symbol)));
-                clicked = true;
-            }
+        if self.open_position_qty.abs() < 1e-4 {
+            return false;
         }
+
+        let h = 20.0;
+        let x = plot.right() - 8.0;
+        let mut clicked = false;
+
+        let label = "SELL";
+        let tip = format!("Close / Sell Open Position ({:.2} shs) (⇧S)", self.open_position_qty);
+        let color = theme::down();
+
+        let g = ui.painter().layout_no_wrap(label.into(), mono(11.0), Color32::WHITE);
+        let w = g.size().x + 18.0;
+        let r = Rect::from_min_size(pos2(x - w, plot.top() + 6.0), vec2(w, h));
+        let resp = ui.interact(r, ui.id().with((self.id, "trade", label)), Sense::click()).on_hover_text(tip);
+        let fill = if resp.hovered() { color } else { color.gamma_multiply(0.8) };
+        let p = ui.painter();
+        p.rect_filled(r, h / 2.0, fill);
+        p.galley(r.center() - g.size() / 2.0, g, Color32::WHITE);
+        if resp.clicked() {
+            self.actions.push(Action::Command(format!("SELL {}", self.symbol)));
+            clicked = true;
+        }
+
         clicked
     }
 
@@ -1647,7 +1654,15 @@ impl ChartState {
                 || s.eq_ignore_ascii_case(&self.symbol)
         };
 
-        // 2. Process activities (executed trades/fills)
+        // 2. Track open positions for this security
+        self.open_position_qty = 0.0;
+        for pos in &pf.positions {
+            if matches_sym(&pos.symbol) {
+                self.open_position_qty += pos.units;
+            }
+        }
+
+        // 3. Process activities (executed trades/fills)
         for act in &pf.activities {
             if let Some(act_sym) = &act.symbol
                 && matches_sym(act_sym) {
@@ -2017,6 +2032,25 @@ mod tests {
         assert!(c.order_fill_markers[0].is_buy);
         assert_eq!(c.order_fill_markers[0].qty, 10.0);
         assert_eq!(c.order_fill_markers[0].price, 150.0);
+        assert_eq!(c.open_position_qty, 0.0, "no open position initially");
+
+        // When a position exists, open_position_qty tracks it
+        pf.positions.push(tr_broker::Position {
+            account_id: "ACC1".into(),
+            symbol: "AAPL".into(),
+            description: "Apple".into(),
+            kind: tr_broker::InstrumentKind::Stock,
+            units: 25.0,
+            price: Some(155.0),
+            cost_basis: Some(150.0),
+            multiplier: 1.0,
+            currency: "USD".into(),
+            cash_equivalent: false,
+            underlying: None,
+            market: None,
+        });
+        c.sync_order_fills(Some(&pf));
+        assert_eq!(c.open_position_qty, 25.0, "tracks open position quantity");
 
         // Test timezone offset matching (e.g. UTC vs US Eastern time)
         c.bars = Arc::new(vec![
