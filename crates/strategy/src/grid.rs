@@ -119,7 +119,7 @@ pub fn get_market_session_phase(ts: i64) -> MarketSessionPhase {
     // 16:00 ET = 960 min
     // 17:00 ET = 1020 min
 
-    if min_of_day < 510 || min_of_day >= 1020 {
+    if !(510..1020).contains(&min_of_day) {
         MarketSessionPhase::IdleOffSession
     } else if min_of_day < 570 {
         MarketSessionPhase::WakingPreSession

@@ -88,7 +88,8 @@ pub fn run_backtest(
                 let costs = commission * 2.0;
                 let net = gross - costs;
                 cash += position_qty * exit_p - costs;
-                let ret_pct = (net / (entry_price * position_qty)) * 100.0;
+                let notional = entry_price * position_qty;
+                let ret_pct = if notional > 0.0 { (net / notional) * 100.0 } else { 0.0 };
 
                 trades.push(Trade {
                     entry_time: entry_time.clone(),
@@ -157,7 +158,8 @@ pub fn run_backtest(
             let costs = commission * 2.0;
             let net = gross - costs;
             cash += position_qty * exit_p - costs;
-            let ret_pct = (net / (entry_price * position_qty)) * 100.0;
+            let notional = entry_price * position_qty;
+            let ret_pct = if notional > 0.0 { (net / notional) * 100.0 } else { 0.0 };
 
             trades.push(Trade {
                 entry_time,

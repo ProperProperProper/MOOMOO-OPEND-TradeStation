@@ -51,8 +51,8 @@ mod tests {
         assert!(topo.total_cores > 0);
         assert!(topo.e_cores > 0);
         let gov = get_governor_state();
-        assert_eq!(gov.qos_active, true);
-        assert_eq!(gov.e_core_pinned, true);
+        assert!(gov.qos_active);
+        assert!(gov.e_core_pinned);
     }
 
     #[test]

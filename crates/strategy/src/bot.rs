@@ -212,7 +212,8 @@ impl PaperTradingBot {
                     let gross = (exit_price - pos.entry_price) * pos.qty;
                     let net = gross;
                     self.paper_balance += pos.qty * exit_price;
-                    let return_pct = (net / (pos.entry_price * pos.qty)) * 100.0;
+                    let notional = pos.entry_price * pos.qty;
+                    let return_pct = if notional > 0.0 { (net / notional) * 100.0 } else { 0.0 };
 
                     let trade = Trade {
                         entry_time: pos.entry_time,
@@ -240,8 +241,15 @@ impl PaperTradingBot {
             return Ok(None);
         }
 
-        // 4. Regular Session Trading: Evaluate active symbol + any symbol currently holding an open position.
+        // 4. Regular Session Trading: Evaluate active symbol + watchlist symbols + any open positions.
         let mut symbols_to_check = vec![self.active_symbol.clone()];
+        if let Ok(sys) = load_trading_system(&self.config_root) {
+            for s in sys.active_symbols {
+                if !symbols_to_check.contains(&s) {
+                    symbols_to_check.push(s);
+                }
+            }
+        }
         for sym in self.positions.keys() {
             if !symbols_to_check.contains(sym) {
                 symbols_to_check.push(sym.clone());
@@ -261,6 +269,9 @@ impl PaperTradingBot {
                 }
             };
             let current_price = quote.last;
+            if current_price <= 0.0 || current_price.is_nan() {
+                continue;
+            }
 
             let (strat_interval, strat_params) = if sym == self.active_symbol {
                 (self.active_interval, self.active_params.clone())
@@ -315,7 +326,8 @@ impl PaperTradingBot {
                     let gross = (exit_price - pos.entry_price) * pos.qty;
                     let net = gross;
                     self.paper_balance += pos.qty * exit_price;
-                    let return_pct = (net / (pos.entry_price * pos.qty)) * 100.0;
+                    let notional = pos.entry_price * pos.qty;
+                    let return_pct = if notional > 0.0 { (net / notional) * 100.0 } else { 0.0 };
 
                     let trade = Trade {
                         entry_time: pos.entry_time.clone(),
@@ -343,15 +355,19 @@ impl PaperTradingBot {
                 }
             } else {
                 // B. Handle Flat Position Entry:
-                // HARD RULE: Only one position open per symbol.
-                // If sym is already in self.positions, do NOT enter (strictly 1 position max).
+                // HARD RULES:
+                // 1. Only ONE position open per symbol.
+                // 2. Maximum 4 concurrent symbol positions across entire portfolio.
+                const MAX_CONCURRENT_POSITIONS: usize = 4;
+                if self.positions.len() >= MAX_CONCURRENT_POSITIONS {
+                    continue;
+                }
+
                 if !self.has_open_position(&sym)
                     && let Some(sig) = latest_signal
                     && sig.long_signal && is_entry_allowed(quote.timestamp, strat_params.open_delay_minutes) {
                         let entry_price = current_price * (1.0 + 0.0002);
-                        // Portfolio allocation: divide available cash evenly among potential open slots (e.g. up to 4 concurrent positions)
-                        let max_concurrent_symbols = 4.0;
-                        let available_slots = (max_concurrent_symbols - self.positions.len() as f64).max(1.0);
+                        let available_slots = (MAX_CONCURRENT_POSITIONS - self.positions.len()).max(1) as f64;
                         let allocation = 0.95 / available_slots;
                         let spend = (self.paper_balance * allocation).min(self.paper_balance * 0.95);
                         let qty = (spend / entry_price).floor();
