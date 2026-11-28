@@ -457,14 +457,14 @@ pub fn from_env() -> Provider {
     if var("TR_PROVIDER").is_some_and(|p| p.eq_ignore_ascii_case("sample")) {
         return Arc::new(sample::SampleProvider::default().with_live_ticks());
     }
-    let markets = match markets::Markets::new() {
+    
+    (match markets::Markets::new() {
         Ok(m) => Arc::new(m),
         Err(e) => {
             tracing::error!("Moomoo OpenD init failed: {e:#}");
             panic!("Moomoo OpenD initialization failed: {e:#}. Synthetic sample fallback is disabled.");
         }
-    };
-    markets
+    }) as _
 }
 
 /// The browser build's provider: sample data only when `offline`, otherwise live crypto

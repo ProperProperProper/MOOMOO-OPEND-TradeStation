@@ -99,7 +99,7 @@ pub fn interval(tf: Timeframe) -> &'static str {
 }
 
 fn static_interval(s: &str) -> Option<&'static str> {
-    Timeframe::ALL.into_iter().map(interval).find(|i| *i == s).or_else(|| match s {
+    Timeframe::ALL.into_iter().map(interval).find(|i| *i == s).or(match s {
         "1h" => Some("1h"),
         "4h" => Some("4h"),
         "1d" => Some("1d"),

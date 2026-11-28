@@ -1578,7 +1578,7 @@ impl ChartState {
     pub fn match_bar_ts(&self, ts: i64) -> i64 {
         let b = &self.bars;
         let (Some(first), Some(last)) = (b.first(), b.last()) else { return ts };
-        let step = (self.tf.seconds() as i64).max(60);
+        let step = self.tf.seconds().max(60);
         let min_ts = first.ts.saturating_sub(step);
         let max_ts = last.ts.saturating_add(step);
 
@@ -1616,12 +1616,11 @@ impl ChartState {
         let mut pf_to_use = portfolio;
         if pf_to_use.is_none_or(|p| p.activities.is_empty() && p.orders.is_empty()) {
             let path = crate::worker::data_dir().join("demo-account.json");
-            if let Ok(bytes) = crate::storage::read(&path) {
-                if let Ok(book) = tr_broker::demo::DemoBook::from_json(&bytes) {
+            if let Ok(bytes) = crate::storage::read(&path)
+                && let Ok(book) = tr_broker::demo::DemoBook::from_json(&bytes) {
                     fallback_pf = book.portfolio();
                     pf_to_use = Some(&fallback_pf);
                 }
-            }
         }
 
         let Some(pf) = pf_to_use else { return };
@@ -1650,8 +1649,8 @@ impl ChartState {
 
         // 2. Process activities (executed trades/fills)
         for act in &pf.activities {
-            if let Some(act_sym) = &act.symbol {
-                if matches_sym(act_sym) {
+            if let Some(act_sym) = &act.symbol
+                && matches_sym(act_sym) {
                     let is_buy = act.kind.eq_ignore_ascii_case("BUY");
                     let is_sell = act.kind.eq_ignore_ascii_case("SELL");
                     if is_buy || is_sell {
@@ -1668,7 +1667,6 @@ impl ChartState {
                         });
                     }
                 }
-            }
         }
 
         // 3. Process filled orders (avoiding duplicating activities with same order ID)
@@ -1915,7 +1913,7 @@ fn strat_hover_card(ui: &Ui, at: Pos2, m: &tr_strategy::StrategyMarker) {
     p.rect_filled(card, 0.0, Color32::from_rgb(16, 16, 16));
     p.rect_stroke(card, 0.0, Stroke::new(1.0, amber_dim()), StrokeKind::Inside);
     for (k, (l, c)) in lines.iter().enumerate() {
-        p.text(card.left_top() + vec2(7.0, 4.0 + k as f32 * 14.0), Align2::LEFT_TOP, &l, mono(11.5), *c);
+        p.text(card.left_top() + vec2(7.0, 4.0 + k as f32 * 14.0), Align2::LEFT_TOP, l, mono(11.5), *c);
     }
 }
 
@@ -2016,7 +2014,7 @@ mod tests {
 
         c.sync_order_fills(Some(&pf));
         assert_eq!(c.order_fill_markers.len(), 1);
-        assert_eq!(c.order_fill_markers[0].is_buy, true);
+        assert!(c.order_fill_markers[0].is_buy);
         assert_eq!(c.order_fill_markers[0].qty, 10.0);
         assert_eq!(c.order_fill_markers[0].price, 150.0);
 

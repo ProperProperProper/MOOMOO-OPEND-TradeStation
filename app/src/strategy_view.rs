@@ -369,8 +369,8 @@ pub fn strategy_panel(ui: &mut Ui, state: &mut StrategyPaneState) -> Vec<Action>
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Evidence Gate:").font(mono(11.0)).color(color));
                 ui.label(RichText::new(&gate.reason).font(mono(11.0)).color(text()));
-                if gate.allowed {
-                    if ui.button(RichText::new("🚀 PROMOTE WINNER TO PAPER").color(up())).clicked() {
+                if gate.allowed
+                    && ui.button(RichText::new("🚀 PROMOTE WINNER TO PAPER").color(up())).clicked() {
                         if state.bot.position_qty > 0.0 {
                             state.status_message = "⚠️ Rejected: Cannot promote strategy while holding open position".into();
                         } else if let Some(winner) = state.sweep_results.first() {
@@ -380,7 +380,6 @@ pub fn strategy_panel(ui: &mut Ui, state: &mut StrategyPaneState) -> Vec<Action>
                             state.status_message = format!("Promoted {}m winner into paper strategy!", winner.interval);
                         }
                     }
-                }
             });
         }
 

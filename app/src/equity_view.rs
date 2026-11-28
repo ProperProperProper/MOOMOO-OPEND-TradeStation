@@ -13,12 +13,14 @@ use crate::theme::{self, mono, muted, text, ui_font};
 
 #[derive(Debug, Clone)]
 pub struct EquityPoint {
+    #[allow(dead_code)]
     pub ts: i64,
     pub time_str: String,
     pub equity: f64,
     pub cash: f64,
     pub pos_val: f64,
     pub trade_desc: Option<String>,
+    #[allow(dead_code)]
     pub trade_sym: Option<String>,
 }
 
@@ -373,8 +375,8 @@ pub fn equity_curve(ui: &mut Ui, book: &DemoBook) -> Vec<Action> {
         p.add(egui::Shape::line(pts.clone(), Stroke::new(2.4, line_col)));
 
         // Hover crosshair and tooltip
-        if let Some(mouse) = resp.hover_pos() {
-            if plot.contains(mouse) {
+        if let Some(mouse) = resp.hover_pos()
+            && plot.contains(mouse) {
                 // Find nearest point
                 let frac = ((mouse.x - plot.left()) / plot.width()).clamp(0.0, 1.0);
                 let nearest_idx = (frac * (n - 1) as f32).round() as usize;
@@ -389,8 +391,9 @@ pub fn equity_curve(ui: &mut Ui, book: &DemoBook) -> Vec<Action> {
 
                     // Tooltip box
                     let pnl_now = pt.equity - data.starting_cash;
+                    let trade_line = pt.trade_desc.as_deref().map(|d| format!("\nTrade: {d}")).unwrap_or_default();
                     let tip_text = format!(
-                        "Time: {}\nEquity: ${:.2}\nCash: ${:.2}\nPositions: ${:.2}\nP&L: {}${:.2}",
+                        "Time: {}\nEquity: ${:.2}\nCash: ${:.2}\nPositions: ${:.2}\nP&L: {}${:.2}{trade_line}",
                         pt.time_str,
                         pt.equity,
                         pt.cash,
@@ -405,7 +408,8 @@ pub fn equity_curve(ui: &mut Ui, book: &DemoBook) -> Vec<Action> {
                         point_pos + vec2(16.0, -40.0)
                     };
 
-                    let tip_rect = Rect::from_min_size(tip_pos, vec2(136.0, 72.0));
+                    let tip_h = if pt.trade_desc.is_some() { 88.0 } else { 72.0 };
+                    let tip_rect = Rect::from_min_size(tip_pos, vec2(150.0, tip_h));
                     p.rect_filled(tip_rect, 4.0, Color32::from_black_alpha(225));
                     p.rect_stroke(tip_rect, 4.0, Stroke::new(1.0, theme::border()), egui::StrokeKind::Inside);
                     p.text(
@@ -417,7 +421,6 @@ pub fn equity_curve(ui: &mut Ui, book: &DemoBook) -> Vec<Action> {
                     );
                 }
             }
-        }
     } else {
         p.text(
             plot.center(),

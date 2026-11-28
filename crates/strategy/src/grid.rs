@@ -83,7 +83,7 @@ pub fn is_entry_allowed(ts: i64, open_delay_minutes: usize) -> bool {
         let market_min_of_day = hour * 60 + minute;
         // In US regular session, market opens at 9:30 AM EST.
         // We ensure that if within the first hour of regular trading, delay has elapsed.
-        if (market_min_of_day >= 9 * 60 + 30) && (market_min_of_day < 10 * 60 + 30) {
+        if (9 * 60 + 30..10 * 60 + 30).contains(&market_min_of_day) {
             market_min_of_day >= (entry_hour * 60 + entry_min) as u32
         } else {
             true

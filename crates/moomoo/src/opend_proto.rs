@@ -308,10 +308,10 @@ impl OpenDProtoSession {
         let mut symbols = Vec::new();
         if let Some(list) = res.pointer("/s2c/staticInfoList").and_then(|v| v.as_array()) {
             for item in list {
-                if let Some(code) = item.pointer("/basic/security/code").and_then(|v| v.as_str()) {
-                    if !code.is_empty() {
-                        symbols.push(code.to_string());
-                    }
+                if let Some(code) = item.pointer("/basic/security/code").and_then(|v| v.as_str())
+                    && !code.is_empty()
+                {
+                    symbols.push(code.to_string());
                 }
             }
         }

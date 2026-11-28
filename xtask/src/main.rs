@@ -85,10 +85,10 @@ fn workspace_version(root: &Path) -> Result<String> {
     let doc: toml::Value = toml::from_str(&content)
         .with_context(|| format!("Failed to parse {}", cargo_toml_path.display()))?;
 
-    if let Some(pkg) = doc.get("workspace").and_then(|w| w.get("package")) {
-        if let Some(ver) = pkg.get("version").and_then(|v| v.as_str()) {
-            return Ok(ver.to_string());
-        }
+    if let Some(pkg) = doc.get("workspace").and_then(|w| w.get("package"))
+        && let Some(ver) = pkg.get("version").and_then(|v| v.as_str())
+    {
+        return Ok(ver.to_string());
     }
     Ok("0.1.0".to_string())
 }

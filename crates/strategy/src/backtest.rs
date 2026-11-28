@@ -33,6 +33,7 @@ pub fn trades_to_markers(trades: &[Trade]) -> Vec<StrategyMarker> {
 }
 
 /// Replays a series of completed candles through the Grid Open-Cross strategy with causal risk exits.
+#[allow(clippy::too_many_arguments)]
 pub fn run_backtest(
     symbol: &str,
     interval: usize,
@@ -142,8 +143,8 @@ pub fn run_backtest(
     }
 
     // Close any trailing position at final bar close
-    if position_qty > 0.0 {
-        if let Some(last_sig) = signals.last() {
+    if position_qty > 0.0
+        && let Some(last_sig) = signals.last() {
             let exit_p = last_sig.close * (1.0 - slip);
             let gross = (exit_p - entry_price) * position_qty;
             let costs = commission * 2.0;
@@ -164,7 +165,6 @@ pub fn run_backtest(
                 reason: "END_OF_DATA".to_string(),
             });
         }
-    }
 
     let ending_equity = cash;
     let total_return_pct = ((ending_equity - capital) / capital) * 100.0;

@@ -236,35 +236,29 @@ impl OpenDClient {
         let mut symbols = Vec::new();
 
         // 1. Query MooComp watchlist directly from OpenD protocol (ProtoID 3213)
-        if let Ok(mut session) = OpenDProtoSession::connect(&self.addr).await {
-            if let Ok(group_symbols) = session.get_user_security("MooComp").await {
-                if !group_symbols.is_empty() {
+        if let Ok(mut session) = OpenDProtoSession::connect(&self.addr).await
+            && let Ok(group_symbols) = session.get_user_security("MooComp").await
+                && !group_symbols.is_empty() {
                     symbols = group_symbols;
                 }
-            }
-        }
 
         // 2. HTTP gateway fallback if configured
-        if symbols.is_empty() {
-            if let Ok(resp) = self.http_client.get(&url).send().await {
-                if resp.status().is_success() {
-                    if let Ok(res) = resp.json::<Vec<String>>().await {
+        if symbols.is_empty()
+            && let Ok(resp) = self.http_client.get(&url).send().await
+                && resp.status().is_success()
+                    && let Ok(res) = resp.json::<Vec<String>>().await {
                         symbols = res;
                     }
-                }
-            }
-        }
 
         // 3. Environment variable fallback
-        if symbols.is_empty() {
-            if let Ok(watchlist_env) = std::env::var("MOOMOO_WATCHLIST") {
+        if symbols.is_empty()
+            && let Ok(watchlist_env) = std::env::var("MOOMOO_WATCHLIST") {
                 symbols = watchlist_env
                     .split(',')
                     .map(|s| s.trim().to_string())
                     .filter(|s| !s.is_empty())
                     .collect();
             }
-        }
 
         // 4. Default strictly to user's MooComp watchlist
         if symbols.is_empty() {
@@ -339,8 +333,8 @@ impl OpenDClient {
                             .find(|(_, market)| *market == 2)
                             .or_else(|| paper_accs.first());
 
-                        if let Some((acc_id, market)) = target_acc {
-                            if let Ok(funds) = session.get_funds(*acc_id, *market).await {
+                        if let Some((acc_id, market)) = target_acc
+                            && let Ok(funds) = session.get_funds(*acc_id, *market).await {
                                 return Ok(MoomooAccount {
                                     account_id: funds.acc_id,
                                     env,
@@ -351,7 +345,6 @@ impl OpenDClient {
                                     buying_power: funds.power,
                                 });
                             }
-                        }
                     }
                 }
                 TradeEnv::Real => {}
@@ -401,27 +394,22 @@ impl OpenDClient {
         }
 
         // 1. Try direct OpenD native protocol (ProtoID 3001 & 3004)
-        if let Ok(mut session) = OpenDProtoSession::connect(&self.addr).await {
-            if let Ok(quotes) = session.get_quotes(&valid_symbols).await {
-                if !quotes.is_empty() {
+        if let Ok(mut session) = OpenDProtoSession::connect(&self.addr).await
+            && let Ok(quotes) = session.get_quotes(&valid_symbols).await
+                && !quotes.is_empty() {
                     return Ok(quotes);
                 }
-            }
-        }
 
         // 2. Try HTTP endpoint if available
         let mut out = Vec::new();
         for ticker in &valid_symbols {
             let url = format!("http://{}/api/v1/quote?symbol={}", self.addr, ticker);
-            if validate_loopback_only(&url).is_ok() {
-                if let Ok(resp) = self.http_client.get(&url).send().await {
-                    if resp.status().is_success() {
-                        if let Ok(q) = resp.json::<Quote>().await {
+            if validate_loopback_only(&url).is_ok()
+                && let Ok(resp) = self.http_client.get(&url).send().await
+                    && resp.status().is_success()
+                        && let Ok(q) = resp.json::<Quote>().await {
                             out.push(q);
                         }
-                    }
-                }
-            }
         }
         if !out.is_empty() {
             return Ok(out);
@@ -441,24 +429,19 @@ impl OpenDClient {
         }
 
         // Try direct OpenD native protocol first
-        if let Ok(mut session) = OpenDProtoSession::connect(&self.addr).await {
-            if let Ok(bars) = session.get_1min_history(&ticker, limit).await {
-                if !bars.is_empty() {
+        if let Ok(mut session) = OpenDProtoSession::connect(&self.addr).await
+            && let Ok(bars) = session.get_1min_history(&ticker, limit).await
+                && !bars.is_empty() {
                     return Ok(bars);
                 }
-            }
-        }
 
         let url = format!("http://{}/api/v1/history?symbol={}&limit={}&interval=1m", self.addr, ticker, limit);
-        if validate_loopback_only(&url).is_ok() {
-            if let Ok(resp) = self.http_client.get(&url).send().await {
-                if resp.status().is_success() {
-                    if let Ok(bars) = resp.json::<Vec<Bar>>().await {
+        if validate_loopback_only(&url).is_ok()
+            && let Ok(resp) = self.http_client.get(&url).send().await
+                && resp.status().is_success()
+                    && let Ok(bars) = resp.json::<Vec<Bar>>().await {
                         return Ok(bars);
                     }
-                }
-            }
-        }
 
         bail!("Could not retrieve 1min bars from OpenD for '{ticker}'")
     }
@@ -474,16 +457,14 @@ impl OpenDClient {
         let upper = symbol.trim().to_uppercase();
 
         // Synchronous check against cached watchlist if available
-        if let Ok(guard) = self.cached_watchlist.try_read() {
-            if let Some(set) = &*guard {
-                if !set.contains(&sym) && !set.contains(&upper) {
+        if let Ok(guard) = self.cached_watchlist.try_read()
+            && let Some(set) = &*guard
+                && !set.contains(&sym) && !set.contains(&upper) {
                     let msg = format!("⚠️ SECURITY ALERT: Rejected streaming subscription for '{symbol}': symbol is NOT in your Moomoo account watchlist.");
                     eprintln!("{msg}");
                     warn!("{msg}");
                     return None;
                 }
-            }
-        }
 
         let (tx, rx) = mpsc::channel(100);
         let client = self.clone();
@@ -499,11 +480,10 @@ impl OpenDClient {
             let mut interval = tokio::time::interval(std::time::Duration::from_millis(500));
             loop {
                 interval.tick().await;
-                if let Ok(q) = client.fetch_quote(&sym).await {
-                    if tx.send(q).await.is_err() {
+                if let Ok(q) = client.fetch_quote(&sym).await
+                    && tx.send(q).await.is_err() {
                         break;
                     }
-                }
             }
         });
 

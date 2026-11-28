@@ -88,7 +88,9 @@ pub enum Icon {
     Bell,
     Gauge,
     Search,
+    #[allow(dead_code)]
     Globe,
+    #[allow(dead_code)]
     Curve,
     People,
     List,

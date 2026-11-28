@@ -146,11 +146,13 @@ pub fn wei(ui: &mut Ui, quotes: &HashMap<String, Quote>, updated: Option<&str>) 
 }
 
 /// Tenor label for the curve axis (`1M`, `10Y`).
+#[allow(dead_code)]
 pub fn tenor_label(years: f64) -> String {
     if years < 1.0 { format!("{}M", (years * 12.0).round() as i64) } else { format!("{}Y", years.round() as i64) }
 }
 
 /// Yield curve chart and tenor table.
+#[allow(dead_code)]
 pub fn curve(ui: &mut Ui, curves: Option<&YieldCurves>) -> Vec<Action> {
     let mut out = Vec::new();
     let Some(c) = curves else {

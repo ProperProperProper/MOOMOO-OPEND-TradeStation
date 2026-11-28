@@ -145,10 +145,11 @@ pub fn price_grid(o: &Ohlcv, lookback: usize) -> Vec<(&'static str, Vec<f64>)> {
         for k in (i - lookback)..i {
             // Guard against multi-day / weekend session gaps: if we have bars in the current day,
             // don't let bars from a previous day across a large gap dominate the intraday grid.
-            if cur_day > 0 && o.ts.get(k).map_or(false, |&kts| kts.div_euclid(86_400) < cur_day) {
-                if i - k > 2 {
-                    continue;
-                }
+            if cur_day > 0
+                && o.ts.get(k).is_some_and(|&kts| kts.div_euclid(86_400) < cur_day)
+                && i - k > 2
+            {
+                continue;
             }
             if o.high[k] > prior_h {
                 prior_h = o.high[k];

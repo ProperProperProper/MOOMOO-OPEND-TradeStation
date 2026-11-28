@@ -164,13 +164,11 @@ impl PaperTradingBot {
             }
 
             // Check candle open cross downward
-            if exit_reason.is_none() {
-                if let Some(sig) = latest_signal {
-                    if sig.close_signal {
+            if exit_reason.is_none()
+                && let Some(sig) = latest_signal
+                    && sig.close_signal {
                         exit_reason = Some("OPEN_CROSSED_GRID_DOWN");
                     }
-                }
-            }
 
             if let Some(reason) = exit_reason {
                 let exit_price = current_price * (1.0 - 0.0002);
@@ -207,9 +205,9 @@ impl PaperTradingBot {
         }
 
         // 4. Handle Flat Position Entries
-        if self.position_qty == 0.0 {
-            if let Some(sig) = latest_signal {
-                if sig.long_signal && is_entry_allowed(quote.timestamp, self.active_params.open_delay_minutes) {
+        if self.position_qty == 0.0
+            && let Some(sig) = latest_signal
+                && sig.long_signal && is_entry_allowed(quote.timestamp, self.active_params.open_delay_minutes) {
                     let entry_price = current_price * (1.0 + 0.0002);
                     let allocation = 0.95;
                     let spend = self.paper_balance * allocation;
@@ -227,8 +225,6 @@ impl PaperTradingBot {
                         return Ok(Some(msg));
                     }
                 }
-            }
-        }
 
         Ok(None)
     }

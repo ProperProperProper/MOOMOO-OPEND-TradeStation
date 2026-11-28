@@ -507,15 +507,15 @@ fn cached_bars(s: &Shared, symbol: &str, tf: Timeframe, limit: usize) -> Option<
     let m1_limit = (limit * tf.minutes() as usize).max(limit);
     s.cache.lock().ok().and_then(|c| {
         c.as_ref().and_then(|c| {
-            if let Ok(m1_bars) = c.load(&sec.ticker, Timeframe::M1, m1_limit) {
-                if !m1_bars.is_empty() {
-                    return Some(tf.resample(&m1_bars));
-                }
+            if let Ok(m1_bars) = c.load(&sec.ticker, Timeframe::M1, m1_limit)
+                && !m1_bars.is_empty()
+            {
+                return Some(tf.resample(&m1_bars));
             }
-            if let Ok(m1_bars) = c.load(symbol, Timeframe::M1, m1_limit) {
-                if !m1_bars.is_empty() {
-                    return Some(tf.resample(&m1_bars));
-                }
+            if let Ok(m1_bars) = c.load(symbol, Timeframe::M1, m1_limit)
+                && !m1_bars.is_empty()
+            {
+                return Some(tf.resample(&m1_bars));
             }
             c.load(symbol, tf, limit).ok()
         })

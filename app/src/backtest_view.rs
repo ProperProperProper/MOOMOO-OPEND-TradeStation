@@ -16,6 +16,7 @@ pub struct BacktestPaneState {
     pub symbol: String,
     pub interval: usize,
     pub tf: Timeframe,
+    #[allow(dead_code)]
     pub result: Option<BacktestResult>,
     pub chart: ChartState,
     pub status: String,
@@ -83,7 +84,8 @@ impl BacktestPaneState {
             ui.label(RichText::new(&sec.ticker).font(mono(11.5)).strong().color(text()));
             ui.label(RichText::new(format!("★ {}m", self.interval)).font(mono(11.0)).color(up()));
             ui.label(RichText::new("·").color(muted()));
-            ui.label(RichText::new("Simulated Trades").font(mono(10.0)).color(amber()));
+            ui.label(RichText::new("Simulated Trades").font(mono(10.0)).color(amber()))
+                .on_hover_text(&self.status);
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(dp(6.0));

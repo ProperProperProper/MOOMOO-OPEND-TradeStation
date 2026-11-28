@@ -76,11 +76,10 @@ pub fn list_configured_symbols(root: &Path) -> Vec<String> {
     let mut symbols = Vec::new();
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
-            if entry.path().is_dir() {
-                if let Some(name) = entry.file_name().to_str() {
+            if entry.path().is_dir()
+                && let Some(name) = entry.file_name().to_str() {
                     symbols.push(slug_to_symbol(name));
                 }
-            }
         }
     }
     symbols.sort();

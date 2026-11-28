@@ -62,23 +62,21 @@ impl MarketData for Markets {
 
         // 1. Load any stored 1-minute bars from SQLite disk cache
         let mut all_1m_bars: Vec<Bar> = Vec::new();
-        if let Ok(guard) = self.cache.lock() {
-            if let Some(c) = guard.as_ref() {
+        if let Ok(guard) = self.cache.lock()
+            && let Some(c) = guard.as_ref() {
                 if let Ok(loaded) = c.load(&sec.ticker, Timeframe::M1, 5000) {
                     all_1m_bars = loaded;
                 }
-                if all_1m_bars.is_empty() {
-                    if let Ok(loaded) = c.load(symbol, Timeframe::M1, 5000) {
+                if all_1m_bars.is_empty()
+                    && let Ok(loaded) = c.load(symbol, Timeframe::M1, 5000) {
                         all_1m_bars = loaded;
                     }
-                }
             }
-        }
 
         // 2. Query fresh 1-minute bars from OpenD if available
         let m1_limit = (limit * tf.minutes() as usize).max(limit).clamp(100, 1000);
-        if let Ok(fresh) = self.moomoo.fetch_1min_history(&sec.ticker, m1_limit).await {
-            if !fresh.is_empty() {
+        if let Ok(fresh) = self.moomoo.fetch_1min_history(&sec.ticker, m1_limit).await
+            && !fresh.is_empty() {
                 let mapped: Vec<Bar> = fresh
                     .into_iter()
                     .map(|b| Bar {
@@ -92,18 +90,16 @@ impl MarketData for Markets {
                     .collect();
 
                 // Persist new 1-minute candles to disk cache so they are stored forever
-                if let Ok(mut guard) = self.cache.lock() {
-                    if let Some(c) = guard.as_mut() {
+                if let Ok(mut guard) = self.cache.lock()
+                    && let Some(c) = guard.as_mut() {
                         let _ = c.store(&sec.ticker, Timeframe::M1, &mapped);
                         let _ = c.store(symbol, Timeframe::M1, &mapped);
                     }
-                }
 
                 all_1m_bars.extend(mapped);
                 all_1m_bars.sort_by_key(|b| b.ts);
                 all_1m_bars.dedup_by_key(|b| b.ts);
             }
-        }
 
         if all_1m_bars.is_empty() {
             bail!("No real candle data available for '{symbol}'. Synthetic fallback is disabled.");
@@ -153,8 +149,8 @@ impl MarketData for Markets {
                     ts: q.timestamp,
                     spark: vec![q.prev_close, q.low, q.high, q.last],
                 });
-            } else if let Ok(guard) = self.cache.lock() {
-                if let Some(c) = guard.as_ref() {
+            } else if let Ok(guard) = self.cache.lock()
+                && let Some(c) = guard.as_ref() {
                     let bars = c.load(ticker, Timeframe::M1, 30)
                         .or_else(|_| c.load(&key, Timeframe::M1, 30))
                         .unwrap_or_default();
@@ -178,7 +174,6 @@ impl MarketData for Markets {
                         });
                     }
                 }
-            }
         }
         Ok(out)
     }

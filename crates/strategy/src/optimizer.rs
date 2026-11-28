@@ -270,20 +270,16 @@ pub async fn fetch_ai_proposals(
         "qos": "background"
     });
 
-    if let Ok(resp) = client.post(gateway_url).json(&body).send().await {
-        if resp.status().is_success() {
+    if let Ok(resp) = client.post(gateway_url).json(&body).send().await
+        && resp.status().is_success() {
             // Local AI gateway answered
-            if let Ok(val) = resp.json::<serde_json::Value>().await {
-                if let Some(text) = val.get("response").and_then(|r| r.as_str()) {
-                    if let Ok(parsed) = serde_json::from_str::<Vec<StrategyParams>>(text) {
-                        if !parsed.is_empty() {
+            if let Ok(val) = resp.json::<serde_json::Value>().await
+                && let Some(text) = val.get("response").and_then(|r| r.as_str())
+                    && let Ok(parsed) = serde_json::from_str::<Vec<StrategyParams>>(text)
+                        && !parsed.is_empty() {
                             return parsed;
                         }
-                    }
-                }
-            }
         }
-    }
 
     // Bounded stochastic proposals aligned with local research models
     generate_candidates(4, base)

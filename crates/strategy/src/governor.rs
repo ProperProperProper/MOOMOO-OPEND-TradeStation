@@ -106,19 +106,16 @@ pub fn check_thermal_status() -> (ThermalStatus, Option<f64>) {
             let s = String::from_utf8_lossy(&output.stdout).to_lowercase();
             let mut speed_limit: Option<f64> = None;
             for line in s.lines() {
-                if let Some(pos) = line.find("cpu_speed_limit") {
-                    if let Some(eq) = line[pos..].find('=') {
-                        if let Ok(val) = line[pos + eq + 1..].trim().parse::<f64>() {
+                if let Some(pos) = line.find("cpu_speed_limit")
+                    && let Some(eq) = line[pos..].find('=')
+                        && let Ok(val) = line[pos + eq + 1..].trim().parse::<f64>() {
                             speed_limit = Some(val);
                         }
-                    }
-                }
             }
-            if let Some(limit) = speed_limit {
-                if limit < 80.0 {
+            if let Some(limit) = speed_limit
+                && limit < 80.0 {
                     return (ThermalStatus::Throttled, Some(limit));
                 }
-            }
             if s.contains("warning") || s.contains("thermal level: 2") || s.contains("thermal level = 2") {
                 return (ThermalStatus::Hot, speed_limit);
             }
