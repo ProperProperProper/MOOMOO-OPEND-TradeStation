@@ -54,3 +54,4 @@
 - Conventions: outputs align with the bars and are NaN during warm-up; EMA is seeded with the SMA;
   RSI, ATR and ADX use Wilder smoothing; standard deviations are population; sessions (VWAP,
   pivots) are days for intraday bars, months for daily and years above.
+- **Mathematical Formulations & Numerical Precision**: Complete closed-form equations, John Ehlers DSP filter derivations, sliding window $O(1)$ algorithms, and IEEE 754 catastrophic cancellation defenses are documented in [`docs/INDICATOR_MATHEMATICS_AND_NUMERICAL_PRECISION.md`](../INDICATOR_MATHEMATICS_AND_NUMERICAL_PRECISION.md).

@@ -64,7 +64,8 @@ A fast, keyboard-driven market terminal in pure Rust: GPU charting with a Bloomb
 ### 4. GPU-Accelerated Charting Engine
 - **Rendering**: Pure `wgpu` Metal/Vulkan/DX12 GPU pipeline rendering 1M+ bars smoothly.
 - **Timeframes**: 1m, 2m, 3m, 5m, 8m, 15m, 30m, 1H, 4H, 1D, 1W, 1M with linear and logarithmic scales.
-- **151 Built-In Indicators**: Moving averages (SMA, EMA, WMA, Hull, DEMA, TEMA, KAMA, VWAP), volatility bands (Bollinger, Keltner, Donchian), momentum oscillators (RSI, MACD, Stochastic, CCI), and pivot points.
+- **151 Pure Math Built-In Indicators**: 100% computed in native Rust using closed-form analytical formulas and DSP filters (zero external indicator APIs/services). Includes Moving Averages (SMA, EMA, WMA, HMA, DEMA, TEMA, KAMA, Ehlers SuperSmoother), Volatility Bands (Bollinger, Keltner, Donchian, ATR), Momentum Oscillators (RSI, MACD, Stochastics, CCI), and Session Levels (VWAP, Camarilla/Fibonacci Pivots).
+  > 📐 **Full Mathematical Formulations**: See [docs/INDICATOR_MATHEMATICS_AND_NUMERICAL_PRECISION.md](docs/INDICATOR_MATHEMATICS_AND_NUMERICAL_PRECISION.md) for complete analytical equations, DSP dampening coefficients, and IEEE 754 catastrophic-cancellation defenses.
 - **Interactive Tools**: Trendlines (Alt+T), Horizontal Lines (Alt+H), Vertical Lines (Alt+V), Fibonacci Retracements (Alt+F).
 
 ### 5. Persistent Workspace & Layouts

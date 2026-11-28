@@ -11,6 +11,9 @@
 //! The functions are grouped by family; [`registry`] lists every indicator with its
 //! parameters, placement and outputs, and is what the app's command line, picker and chart
 //! are driven from.
+//!
+//! For complete analytical derivations, John Ehlers DSP coefficient formulas, and IEEE 754
+//! catastrophic-cancellation defenses, see `docs/INDICATOR_MATHEMATICS_AND_NUMERICAL_PRECISION.md`.
 
 use crate::Bar;
 
